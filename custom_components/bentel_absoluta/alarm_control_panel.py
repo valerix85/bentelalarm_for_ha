@@ -4,12 +4,14 @@ from .const import DOMAIN, CMD_PARTITION_ARM, CMD_PARTITION_DISARM
 
 _LOGGER = logging.getLogger(__name__)
 
+
 async def async_setup_entry(hass, entry, async_add_entities):
     protocol = hass.data[DOMAIN][entry.entry_id]
     entities = []
     for part in protocol.partitions:
         entities.append(BentelAlarmEntity(protocol, part))
     async_add_entities(entities)
+
 
 class BentelAlarmEntity(AlarmControlPanelEntity):
     def __init__(self, protocol, partition):
@@ -30,10 +32,14 @@ class BentelAlarmEntity(AlarmControlPanelEntity):
 
     async def async_alarm_arm_away(self, code=None):
         # comando arm away
-        await self.protocol.send_command(CMD_PARTITION_ARM, bytes([self.partition.id, 0x02]))
+        await self.protocol.send_command(
+            CMD_PARTITION_ARM, bytes([self.partition.id, 0x02])
+        )
         self._state = "armed_away"
 
     async def async_alarm_disarm(self, code=None):
         # comando disarm
-        await self.protocol.send_command(CMD_PARTITION_DISARM, bytes([self.partition.id]))
+        await self.protocol.send_command(
+            CMD_PARTITION_DISARM, bytes([self.partition.id])
+        )
         self._state = "disarmed"
