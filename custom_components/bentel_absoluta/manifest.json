@@ -1,10 +1,13 @@
-{
+  {
     "domain": "bentel_absoluta",
     "name": "Bentel Absoluta",
-    "version": "1.0.0",
-    "documentation": "https://github.com/valerix85/bentelalarm_for_ha",
-    "requirements": [],
-    "dependencies": [],
     "codeowners": ["@valerix85"],
-    "iot_class": "local_poll"
+    "config_flow": true,
+    "dependencies": [],
+    "documentation": "https://github.com/valerix85/bentelalarm_for_ha/wiki",
+    "integration_type": "hub",
+    "iot_class": "local_poll",
+    "issue_tracker": "https://github.com/valerix85/bentelalarm_for_ha/issues",
+    "requirements": [],
+    "version": "0.0.1"
   }
