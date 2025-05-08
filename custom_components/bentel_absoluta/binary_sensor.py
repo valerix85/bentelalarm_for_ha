@@ -4,6 +4,7 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
+
 async def async_setup_entry(hass, entry, async_add_entities):
     protocol = hass.data[DOMAIN][entry.entry_id]
     # Supponiamo che protocol.zones sia mappato a lista di zone
@@ -11,6 +12,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     for zone in protocol.zones:
         entities.append(ZoneBinarySensor(protocol, zone))
     async_add_entities(entities)
+
 
 class ZoneBinarySensor(BinarySensorEntity):
     def __init__(self, protocol, zone):
