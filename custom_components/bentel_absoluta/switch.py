@@ -1,10 +1,12 @@
 from homeassistant.components.switch import SwitchEntity
 from .const import DOMAIN, CMD_OUTPUT_CTRL
 
+
 async def async_setup_entry(hass, entry, async_add_entities):
     protocol = hass.data[DOMAIN][entry.entry_id]
     entities = [OutputSwitch(protocol, out) for out in protocol.outputs]
     async_add_entities(entities)
+
 
 class OutputSwitch(SwitchEntity):
     def __init__(self, protocol, output):
