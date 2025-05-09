@@ -1,6 +1,16 @@
 import asyncio
 import struct
-from .const import FRAME_START, FRAME_END, ESCAPE, CRC_POLY, CRC_INIT, CRC_XOROUT
+from .const import (
+    FRAME_START,
+    FRAME_END,
+    ESCAPE,
+    CRC_POLY,
+    CRC_INIT,
+    CRC_XOROUT,
+    CMD_OPEN_SESSION,
+    DEFAULT_TIMEOUT,
+)
+
 
 class BentelProtocol:
     def __init__(self, host, port, timeout=DEFAULT_TIMEOUT):
@@ -22,19 +32,39 @@ class BentelProtocol:
             await self.writer.wait_closed()
 
     async def _open_session(self):
-        payload = bytes([0x8F])  # esempio dispositivo
+        """
+        Invia il comando Open Session (0x060A) con payload completo secondo specifica ITv2.
+        """
+        # Payload Open Session:
+        # Device Type (0x8F), Device ID (0x0000), SW Version 1.00, Proto Version 2.00,
+        # TX buf 48, RX buf 200, Encryption none
+        payload = bytes(
+            [
+                0x8F,  # Device Type
+                0x00,
+                0x00,  # Device ID
+                0x01,
+                0x00,  # Software Version 1.00
+                0x02,
+                0x00,  # Protocol Version 2.00
+                0x00,
+                0x32,  # TX buffer size = 50
+                0x00,
+                0xC8,  # RX buffer size = 200
+                0x00,  # Encryption none
+            ]
+        )
         frame = self._build_frame(CMD_OPEN_SESSION, payload)
         await self._send_frame(frame)
+        # Attende la risposta di Open Session
         await self._recv_response()
 
     def _build_frame(self, cmd, payload: bytes) -> bytes:
-        # Sequence numbers
-        hdr = struct.pack('>B B', self.seq, self.remote_seq)
-        body = bytes([cmd]) + hdr + payload
-        # Calcola CRC
+        # Header: CMD + Seq + Remote Seq
+        hdr = struct.pack(">B B B", cmd, self.seq, self.remote_seq)
+        body = hdr + payload
         crc = self._crc16_ccitt(body)
-        body += struct.pack('>H', crc)
-        # Framing e escaping
+        body += struct.pack(">H", crc)
         framed = bytearray([FRAME_START])
         for b in body:
             if b in (FRAME_START, FRAME_END, ESCAPE):
@@ -43,7 +73,6 @@ class BentelProtocol:
             else:
                 framed.append(b)
         framed.append(FRAME_END)
-        # Aggiorna sequence
         self.seq = (self.seq + 1) & 0xFF
         return bytes(framed)
 
@@ -60,11 +89,12 @@ class BentelProtocol:
                 break
             buf.append(b[0])
         data = self._unescape(bytes(buf))
-        # Verifica CRC
-        payload, ok = self._check_crc(data)
+        # Verifica CRC e restituisce content
+        content, ok = self._check_crc(data)
         if not ok:
             raise IOError("CRC error nel pacchetto ricevuto")
-        return payload
+        # content include cmd, seq, remote_seq, app_seq, status, data...
+        return content
 
     def _unescape(self, data: bytes) -> bytes:
         out = bytearray()
@@ -92,24 +122,25 @@ class BentelProtocol:
 
     def _check_crc(self, data: bytes) -> (bytes, bool):
         content = data[:-2]
-        recv_crc = struct.unpack('>H', data[-2:])[0]
+        recv_crc = struct.unpack(">H", data[-2:])[0]
         calc_crc = self._crc16_ccitt(content)
         return content, recv_crc == calc_crc
+
+
 async def send_command(self, cmd, payload: bytes) -> bytes:
-        """
-        Costruisce il frame, invia e attende risposta applicativa.
-        Riprova fino a 4 volte in caso di timeout o CRC error.
-        Restituisce solo il payload dell'Application Layer (senza header, CRC).
-        """
-        for attempt in range(4):
-            frame = self._build_frame(cmd, payload)
-            await self._send_frame(frame)
-            try:
-                resp = await self._recv_response()
-                # Response Application: [cmd_rsp(1), seq(1), remote_seq(1), app_seq(1), status(1), data...]
-                # Skip header e status
-                app_data = resp[4:]
-                return app_data
-            except (asyncio.TimeoutError, IOError):
-                continue
-        raise ConnectionError(f"Nessuna risposta valida per comando {cmd:#04x}")
+    for attempt in range(4):
+        frame = self._build_frame(cmd, payload)
+        await self._send_frame(frame)
+        try:
+            resp = await self._recv_response()
+            # resp layout: [cmd_rsp(1), seq(1), remote_seq(1), app_seq(1), status(1), data...]
+            # Update remote_seq to panel's sequence number for ACK
+            panel_seq = resp[1]
+            self.remote_seq = panel_seq
+            # Return application data skipping header and status
+            return resp[5:]
+        except (asyncio.TimeoutError, IOError):
+            continue
+    raise ConnectionError(f"Nessuna risposta valida per comando {cmd:#04x}")(
+        f"Nessuna risposta valida per comando {cmd:#04x}"
+    )
