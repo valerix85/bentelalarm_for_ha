@@ -1,36 +1,116 @@
-import logging
-from homeassistant.components.binary_sensor import BinarySensorEntity
-from .const import DOMAIN
+"""Binary sensors: zones, partition troubles/ready and panel connection."""
 
-_LOGGER = logging.getLogger(__name__)
+from __future__ import annotations
+
+from homeassistant.components.binary_sensor import (
+    BinarySensorDeviceClass,
+    BinarySensorEntity,
+)
+from homeassistant.const import EntityCategory
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+
+from . import BentelConfigEntry
+from .entity import BentelEntity
 
 
-async def async_setup_entry(hass, entry, async_add_entities):
-    protocol = hass.data[DOMAIN][entry.entry_id]
-    # Supponiamo che protocol.zones sia mappato a lista di zone
-    entities = []
-    for zone in protocol.zones:
-        entities.append(ZoneBinarySensor(protocol, zone))
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: BentelConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
+) -> None:
+    client = entry.runtime_data
+    entities: list[BinarySensorEntity] = [BentelConnection(entry)]
+    entities += [BentelZone(entry, z) for z in client.user_zones]
+    for part in client.user_partitions:
+        entities.append(BentelPartitionFlag(entry, part, "trouble"))
+        entities.append(BentelPartitionFlag(entry, part, "ready"))
     async_add_entities(entities)
 
 
-class ZoneBinarySensor(BinarySensorEntity):
-    def __init__(self, protocol, zone):
-        self.protocol = protocol
+class BentelZone(BentelEntity, BinarySensorEntity):
+    """Zone open/closed. Device class can be changed from the HA UI."""
+
+    def __init__(self, entry: BentelConfigEntry, zone: int) -> None:
+        super().__init__(entry, f"zone_{zone}")
         self.zone = zone
-        self._attr_name = f"Zone {zone.id}"
-        self._attr_unique_id = f"{DOMAIN}_zone_{zone.id}"
-        self._state = None
+        label = self.client.zone_labels.get(zone)
+        if label:
+            self._attr_name = label
+        else:
+            self._attr_translation_key = "zone"
+            self._attr_translation_placeholders = {"number": str(zone)}
 
     @property
-    def is_on(self):
-        # stato allarme per la zona
-        return self._state
+    def is_on(self) -> bool | None:
+        status = self.client.zones.get(self.zone)
+        return None if status is None else status.open
 
-    async def async_update(self):
-        # richiede lo stato zona 0811
-        payload = bytes([self.zone.id])
-        data = await self.protocol.send_command(0x0811, payload)
-        # parse: data[0] bitmask: bit0=alarm, bit1=tamper...
-        alarm = bool(data[0] & 0x01)
-        self._state = alarm
+    @property
+    def extra_state_attributes(self) -> dict:
+        status = self.client.zones.get(self.zone)
+        if status is None:
+            return {"zone": self.zone}
+        return {
+            "zone": self.zone,
+            "alarm": status.alarm,
+            "alarm_in_memory": status.alarm_in_memory,
+            "tamper": status.tamper,
+            "fault": status.fault,
+            "low_battery": status.low_battery,
+            "bypassed": status.bypassed,
+            "delinquency": status.delinquency,
+        }
+
+
+class BentelPartitionFlag(BentelEntity, BinarySensorEntity):
+    """Partition 'trouble' (problem) or 'ready to arm'."""
+
+    def __init__(self, entry: BentelConfigEntry, partition: int, kind: str) -> None:
+        super().__init__(entry, f"partition_{partition}_{kind}")
+        self.partition = partition
+        self.kind = kind
+        self._attr_translation_key = f"partition_{kind}"
+        self._attr_translation_placeholders = {
+            "partition": self.client.partition_labels.get(partition, str(partition))
+        }
+        if kind == "trouble":
+            self._attr_device_class = BinarySensorDeviceClass.PROBLEM
+        else:
+            self._attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    @property
+    def is_on(self) -> bool | None:
+        status = self.client.partitions.get(self.partition)
+        if status is None:
+            return None
+        return status.troubles if self.kind == "trouble" else status.ready
+
+
+class BentelConnection(BentelEntity, BinarySensorEntity):
+    """ITv2 session state (always available)."""
+
+    _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_translation_key = "connection"
+
+    def __init__(self, entry: BentelConfigEntry) -> None:
+        super().__init__(entry, "connection")
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def is_on(self) -> bool:
+        return self.client.connected
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        info = self.client.info
+        return {
+            "model": info.model,
+            "firmware": info.firmware,
+            "mac": info.identifier,
+            "panel_time": self.client.panel_time.isoformat() if self.client.panel_time else None,
+        }
