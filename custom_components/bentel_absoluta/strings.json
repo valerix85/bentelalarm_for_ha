@@ -1,0 +1,109 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Bentel Absoluta",
+        "description": "Connect to the Absoluta panel through the ABS-IP plug-in (ITv2 protocol over TCP). The ITv2 session is closed by the panel whenever BOSS or the mobile app connects; the integration reconnects automatically.",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "pin": "User PIN"
+        },
+        "data_description": {
+          "host": "IP address of the ABS-IP plug-in",
+          "port": "ITv2 TCP port (default 3064)",
+          "pin": "PIN of a Master, Normal or Limited user (1-6 digits). Only the partitions, zones and outputs of this user are exposed."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Update the user PIN",
+        "description": "The panel rejected the stored PIN. Enter a valid user PIN.",
+        "data": {
+          "pin": "User PIN"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure Bentel Absoluta",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "pin": "User PIN"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to the panel. Check IP/port, that the ITv2 protocol is enabled on the ABS-IP and that no other ITv2 client is connected.",
+      "invalid_auth": "The panel rejected the PIN.",
+      "invalid_pin": "The PIN must be 1 to 6 digits.",
+      "unknown": "Unexpected error, see the log."
+    },
+    "abort": {
+      "already_configured": "This panel is already configured.",
+      "reauth_successful": "PIN updated.",
+      "reconfigure_successful": "Configuration updated."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options",
+        "data": {
+          "poll_interval": "Status polling interval",
+          "require_code": "Require the code to arm/disarm from Home Assistant"
+        },
+        "data_description": {
+          "poll_interval": "Zone open/closed state is not pushed by the panel and is polled at this interval (it also works as keep-alive).",
+          "require_code": "When enabled the alarm panel entities ask for the user PIN and the arming-mode buttons are not created."
+        }
+      }
+    }
+  },
+  "entity": {
+    "alarm_control_panel": {
+      "partition": {
+        "name": "Partition {number}"
+      }
+    },
+    "binary_sensor": {
+      "zone": {
+        "name": "Zone {number}"
+      },
+      "connection": {
+        "name": "Connection"
+      },
+      "partition_trouble": {
+        "name": "{partition} trouble"
+      },
+      "partition_ready": {
+        "name": "{partition} ready"
+      }
+    },
+    "switch": {
+      "output": {
+        "name": "Output {number}"
+      }
+    },
+    "button": {
+      "remote_command": {
+        "name": "Remote command {number}"
+      },
+      "arm_mode": {
+        "name": "Arm mode {mode}"
+      },
+      "clear_alarm_memory": {
+        "name": "Clear alarm memory"
+      },
+      "clear_all": {
+        "name": "Clear alarms, faults and tampers"
+      }
+    }
+  },
+  "exceptions": {
+    "invalid_code": {
+      "message": "Invalid code."
+    },
+    "command_failed": {
+      "message": "The panel refused the command: {error}"
+    }
+  }
+}

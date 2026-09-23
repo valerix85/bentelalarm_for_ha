@@ -1,44 +1,181 @@
+"""Config flow for Bentel Absoluta."""
+
+from __future__ import annotations
+
 import logging
+from collections.abc import Mapping
+from typing import Any
+
 import voluptuous as vol
-from homeassistant import config_entries
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlow,
+)
+from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import callback
-from .const import DOMAIN, DEFAULT_PORT
+from homeassistant.helpers import selector
+from homeassistant.helpers.device_registry import format_mac
+
+from .const import (
+    CONF_PIN,
+    CONF_POLL_INTERVAL,
+    CONF_REQUIRE_CODE,
+    DEFAULT_POLL_INTERVAL,
+    DEFAULT_PORT,
+    DOMAIN,
+    MAX_POLL_INTERVAL,
+    MIN_POLL_INTERVAL,
+)
+from .itv2.client import AbsolutaClient, AuthenticationFailed, ITv2Error
 
 _LOGGER = logging.getLogger(__name__)
 
+PIN_SELECTOR = selector.TextSelector(
+    selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+)
 
-class BentelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+USER_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_HOST): str,
+        vol.Required(CONF_PORT, default=DEFAULT_PORT): vol.All(
+            vol.Coerce(int), vol.Range(min=1, max=65535)
+        ),
+        vol.Required(CONF_PIN): PIN_SELECTOR,
+    }
+)
+
+
+async def _validate(host: str, port: int, pin: str) -> AbsolutaClient:
+    """Open a session, log in and close it. Returns the client (for its info)."""
+    client = AbsolutaClient(host, pin, port, load_labels=False)
+    try:
+        await client.connect()
+    finally:
+        await client.disconnect()
+    return client
+
+
+def _valid_pin(pin: str) -> bool:
+    return pin.isdigit() and 1 <= len(pin) <= 6
+
+
+class BentelConfigFlow(ConfigFlow, domain=DOMAIN):
+    """Handle a config flow."""
+
     VERSION = 1
-    CONNECTION_CLASS = config_entries.CONN_CLASS_LOCAL_POLL
 
-    async def async_step_user(self, user_input=None):
-        errors = {}
-        if user_input:
-            # Validazione connessione
-            host = user_input["host"]
-            port = user_input.get("port", DEFAULT_PORT)
-            try:
-                # Test di apertura sessione
-                from .utils import BentelProtocol
+    async def _try(self, host: str, port: int, pin: str, errors: dict) -> AbsolutaClient | None:
+        if not _valid_pin(pin):
+            errors[CONF_PIN] = "invalid_pin"
+            return None
+        try:
+            return await _validate(host, port, pin)
+        except AuthenticationFailed:
+            errors["base"] = "invalid_auth"
+        except ITv2Error as err:
+            _LOGGER.debug("Connection test failed: %s", err)
+            errors["base"] = "cannot_connect"
+        except Exception:
+            _LOGGER.exception("Unexpected error")
+            errors["base"] = "unknown"
+        return None
 
-                proto = BentelProtocol(host, port)
-                await proto.connect()
-                await proto.disconnect()
-            except Exception:
-                errors["base"] = "cannot_connect"
-            else:
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            host = user_input[CONF_HOST].strip()
+            port = user_input[CONF_PORT]
+            pin = str(user_input[CONF_PIN]).strip()
+            client = await self._try(host, port, pin, errors)
+            if client is not None:
+                unique = format_mac(client.info.identifier) if client.info.identifier else host
+                await self.async_set_unique_id(unique)
+                self._abort_if_unique_id_configured(updates={CONF_HOST: host, CONF_PORT: port})
                 return self.async_create_entry(
-                    title=host,
-                    data={"host": host, "port": port},
+                    title=f"Bentel {client.info.model}",
+                    data={CONF_HOST: host, CONF_PORT: port, CONF_PIN: pin},
                 )
-        data_schema = vol.Schema(
+        return self.async_show_form(
+            step_id="user",
+            data_schema=self.add_suggested_values_to_schema(USER_SCHEMA, user_input),
+            errors=errors,
+        )
+
+    async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> ConfigFlowResult:
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
+        entry = self._get_reauth_entry()
+        if user_input is not None:
+            pin = str(user_input[CONF_PIN]).strip()
+            if await self._try(entry.data[CONF_HOST], entry.data[CONF_PORT], pin, errors):
+                return self.async_update_reload_and_abort(entry, data_updates={CONF_PIN: pin})
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=vol.Schema({vol.Required(CONF_PIN): PIN_SELECTOR}),
+            errors=errors,
+        )
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Change host/port/PIN of an existing entry."""
+        errors: dict[str, str] = {}
+        entry = self._get_reconfigure_entry()
+        if user_input is not None:
+            host = user_input[CONF_HOST].strip()
+            port = user_input[CONF_PORT]
+            pin = str(user_input[CONF_PIN]).strip()
+            # The panel accepts a single ITv2 connection: free it first.
+            await self.hass.config_entries.async_unload(entry.entry_id)
+            client = await self._try(host, port, pin, errors)
+            if client is not None:
+                return self.async_update_reload_and_abort(
+                    entry, data_updates={CONF_HOST: host, CONF_PORT: port, CONF_PIN: pin}
+                )
+            await self.hass.config_entries.async_setup(entry.entry_id)
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=self.add_suggested_values_to_schema(
+                USER_SCHEMA, user_input or dict(entry.data)
+            ),
+            errors=errors,
+        )
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
+        return BentelOptionsFlow()
+
+
+class BentelOptionsFlow(OptionsFlow):
+    """Polling interval and code requirement."""
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        if user_input is not None:
+            return self.async_create_entry(data=user_input)
+        schema = vol.Schema(
             {
-                vol.Required("host"): str,
-                vol.Optional("port", default=DEFAULT_PORT): int,
+                vol.Required(
+                    CONF_POLL_INTERVAL, default=DEFAULT_POLL_INTERVAL
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=MIN_POLL_INTERVAL,
+                        max=MAX_POLL_INTERVAL,
+                        step=1,
+                        unit_of_measurement="s",
+                        mode=selector.NumberSelectorMode.BOX,
+                    )
+                ),
+                vol.Required(CONF_REQUIRE_CODE, default=False): selector.BooleanSelector(),
             }
         )
         return self.async_show_form(
-            step_id="user",
-            data_schema=data_schema,
-            errors=errors,
+            step_id="init",
+            data_schema=self.add_suggested_values_to_schema(schema, self.config_entry.options),
         )

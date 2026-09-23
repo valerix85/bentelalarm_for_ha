@@ -1,0 +1,109 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Bentel Absoluta",
+        "description": "Collega la centrale Absoluta tramite il modulo ABS-IP (protocollo ITv2 su TCP). La centrale chiude la sessione ITv2 quando si collegano BOSS o l'app mobile; l'integrazione si ricollega da sola.",
+        "data": {
+          "host": "Host",
+          "port": "Porta",
+          "pin": "PIN utente"
+        },
+        "data_description": {
+          "host": "Indirizzo IP del modulo ABS-IP",
+          "port": "Porta TCP ITv2 (predefinita 3064)",
+          "pin": "PIN di un utente Master, Normale o Limitato (1-6 cifre). Vengono esposte solo le aree, zone e uscite di questo utente."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Aggiorna il PIN utente",
+        "description": "La centrale ha rifiutato il PIN salvato. Inserisci un PIN utente valido.",
+        "data": {
+          "pin": "PIN utente"
+        }
+      },
+      "reconfigure": {
+        "title": "Riconfigura Bentel Absoluta",
+        "data": {
+          "host": "Host",
+          "port": "Porta",
+          "pin": "PIN utente"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Impossibile collegarsi alla centrale. Verifica IP/porta, che il protocollo ITv2 sia abilitato sull'ABS-IP e che non ci sia un altro client ITv2 collegato.",
+      "invalid_auth": "La centrale ha rifiutato il PIN.",
+      "invalid_pin": "Il PIN deve essere di 1-6 cifre.",
+      "unknown": "Errore imprevisto, controlla il log."
+    },
+    "abort": {
+      "already_configured": "Questa centrale è già configurata.",
+      "reauth_successful": "PIN aggiornato.",
+      "reconfigure_successful": "Configurazione aggiornata."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opzioni",
+        "data": {
+          "poll_interval": "Intervallo di lettura dello stato",
+          "require_code": "Richiedi il codice per inserire/disinserire da Home Assistant"
+        },
+        "data_description": {
+          "poll_interval": "Lo stato aperto/chiuso delle zone non viene notificato dalla centrale e viene letto a questo intervallo (funziona anche da keep-alive).",
+          "require_code": "Se attivo, le entità di allarme chiedono il PIN utente e i pulsanti delle modalità di inserimento non vengono creati."
+        }
+      }
+    }
+  },
+  "entity": {
+    "alarm_control_panel": {
+      "partition": {
+        "name": "Area {number}"
+      }
+    },
+    "binary_sensor": {
+      "zone": {
+        "name": "Zona {number}"
+      },
+      "connection": {
+        "name": "Connessione"
+      },
+      "partition_trouble": {
+        "name": "{partition} guasti"
+      },
+      "partition_ready": {
+        "name": "{partition} pronta"
+      }
+    },
+    "switch": {
+      "output": {
+        "name": "Uscita {number}"
+      }
+    },
+    "button": {
+      "remote_command": {
+        "name": "Comando remoto {number}"
+      },
+      "arm_mode": {
+        "name": "Inserimento modo {mode}"
+      },
+      "clear_alarm_memory": {
+        "name": "Cancella memoria allarmi"
+      },
+      "clear_all": {
+        "name": "Cancella allarmi, guasti e sabotaggi"
+      }
+    }
+  },
+  "exceptions": {
+    "invalid_code": {
+      "message": "Codice non valido."
+    },
+    "command_failed": {
+      "message": "La centrale ha rifiutato il comando: {error}"
+    }
+  }
+}

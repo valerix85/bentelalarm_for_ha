@@ -1,79 +1,109 @@
 # Bentel Absoluta per Home Assistant
 
-Integrazione personalizzata per Home Assistant che consente di interfacciarsi con la centrale di allarme **Bentel Absoluta** tramite il protocollo **ITv2** su TCP.
+Integrazione personalizzata per Home Assistant che si collega **localmente** alla centrale
+**Bentel Absoluta** tramite il modulo **ABS-IP**, usando il protocollo **ITv2** su TCP
+(nessun cloud, nessun bridge MQTT).
 
-> ⚠️ Richiede che la centrale sia configurata per **connessione TCP/IP (porta 3064)** con **protocollo interattivo ITv2** abilitato.
+> Richiede che sull'ABS-IP sia abilitato il protocollo ITv2 (porta TCP predefinita **3064**,
+> cifratura disabilitata) e il PIN di un utente Master, Normale o Limitato.
 
----
+## Funzionalità
 
-## 🔧 Funzionalità supportate
+| Piattaforma | Cosa espone |
+|---|---|
+| `alarm_control_panel` | Un'entità per ogni **area** assegnata all'utente: inserimento Totale (away), Parziale (home = *stay*), Notte (= *stay istantaneo*), disinserimento. Stati `arming` (tempo di uscita), `pending` (tempo di ingresso), `triggered`. |
+| `binary_sensor` | Una per ogni **zona** (aperta/chiusa, con attributi allarme, memoria, sabotaggio, guasto, batteria bassa, esclusa); per ogni area *guasti* e *pronta*; stato della **connessione**. |
+| `switch` | Le **uscite programmabili** abilitate per l'utente. |
+| `button` | I **comandi remoti**, le **modalità di inserimento A-D** (globali), *cancella memoria allarmi*, *cancella allarmi/guasti/sabotaggi*. |
+| Eventi | `bentel_absoluta_event` con `type`: `arming`, `blocking_condition` (es. mancanza rete che impedisce l'inserimento), `trouble`, `arming_pre_alert`. |
+| Diagnostica | Download dalla pagina del dispositivo (PIN oscurato). |
 
-- 🔐 **Arm/Disarm** delle partizioni tramite `alarm_control_panel`
-- 🚨 **Zone attive** come `binary_sensor`
-- 🔌 **Controllo uscite** via `switch`
-- 📟 **Lettura firmware** via `sensor`
-- 🔑 **Crittografia AES-128 ECB** (opzionale, con chiave nulla)
-- 📶 Comunicazione diretta con protocollo ITv2 conforme alla guida ufficiale Bentel
+I nomi di aree, zone, uscite e modalità di inserimento vengono letti dalla centrale.
 
----
+## Installazione
 
-## 📦 Installazione
+**HACS** (consigliato): *HACS → Integrazioni → ⋮ → Repository personalizzati* →
+`https://github.com/valerix85/bentelalarm_for_ha`, categoria *Integrazione*, poi installa
+*Bentel Absoluta* e riavvia Home Assistant.
 
-1. Copia la cartella `bentel_absoluta/` in: <config>/custom_components/
+**Manuale**: copia `custom_components/bentel_absoluta/` nella cartella
+`<config>/custom_components/` e riavvia.
 
-2. Riavvia Home Assistant.
+Poi *Impostazioni → Dispositivi e servizi → Aggiungi integrazione → Bentel Absoluta* e inserisci
+IP dell'ABS-IP, porta e PIN utente.
 
-3. Vai in **Impostazioni → Dispositivi e servizi → Aggiungi Integrazione**, cerca `Bentel Absoluta`.
+### Opzioni
 
----
+- **Intervallo di lettura dello stato** (default 5 s): l'ABS-IP *non* notifica spontaneamente
+  l'apertura/chiusura delle zone, quindi vengono lette periodicamente. Lo stesso polling fa da
+  keep-alive raccomandato dalla guida Bentel.
+- **Richiedi il codice**: se attivo, le entità allarme chiedono il PIN per inserire/disinserire
+  e i pulsanti delle modalità A-D non vengono creati.
 
-## 🧠 Requisiti della centrale
+## Cose da sapere
 
-- Porta **TCP 3064** abilitata
-- **Protocollo PC-Link/ITv2** attivo
-- Nessuna crittografia (oppure chiave AES nulla)
-- Centrale con firmware compatibile con il protocollo ITv2 (≥ versione 1.0)
+- L'ABS-IP accetta **una sola connessione ITv2** alla volta.
+- La sessione ITv2 ha la **priorità più bassa**: quando si collega BOSS o l'app mobile la
+  centrale la chiude. L'integrazione si ricollega da sola (back-off da 10 s a 5 min).
+- Vengono esposte solo le aree/zone/uscite assegnate all'utente del PIN configurato.
+- La cifratura AES dell'ABS-IP non è supportata: lasciala disabilitata per il client ITv2.
 
----
-
-## ⚙️ Configurazione
-
-Durante la configurazione tramite UI ti verranno richiesti:
-
-- **Indirizzo IP** della centrale
-- **Porta TCP** (default: 3064)
-
-L'integrazione stabilisce automaticamente la sessione con `Open Session (0x060A)` e `Request Access (0x060E)`.
-
----
-
-## 🧪 Debug & sviluppo
-
-Per attivare il logging dettagliato, aggiungi in `configuration.yaml`:
+## Debug
 
 ```yaml
 logger:
-default: warning
-logs:
- custom_components.bentel_absoluta: debug
+  default: warning
+  logs:
+    custom_components.bentel_absoluta: debug
 ```
 
----
+In debug vengono registrati tutti i pacchetti trasmessi/ricevuti (`TX`/`RX`) in esadecimale:
+allegali alle issue insieme al file di diagnostica.
 
-## 📚 Documentazione tecnica
-Questo custom component implementa fedelmente:
+## Sviluppo
 
-Il protocollo ITv2 Usage Guide for Absoluta Rev 1.05
+```
+custom_components/bentel_absoluta/
+├── itv2/            # libreria protocollo, senza dipendenze da Home Assistant
+│   ├── framing.py   # 0x7E/0x7F, escape 7D 00/01/02, lunghezza, CRC-16/CCITT-FALSE
+│   ├── messages.py  # codifica/decodifica dei comandi usati da Absoluta
+│   └── client.py    # sessione asyncio: sequenze/ACK, handshake, login, polling, comandi
+├── alarm_control_panel.py, binary_sensor.py, switch.py, button.py
+└── config_flow.py   # setup, reauth, riconfigurazione, opzioni
+tests/
+├── fake_panel.py    # simulatore di centrale Absoluta (server TCP ITv2)
+├── test_itv2.py     # test del protocollo
+└── test_integration.py  # test in Home Assistant reale
+```
 
-Comandi come 0x060A, 0x060E, 0x060D, 0x0812, 0x0900, 0x0901, 0x0902, ecc.
+```bash
+pip install pytest-homeassistant-custom-component
+pytest
+```
 
-Framing 0x7E / 0x7F, escaping 0x7D, CRC-CCITT, gestione sequenza
+Riferimenti: *Interactive Protocol V2.00 R2.03* e *ITv2 Usage Guide for Absoluta Rev 1.05*
+(Tyco / Bentel Security). Formati e sequenza di sessione sono stati verificati anche
+confrontandoli con il bridge Java open source
+[mostorer/bentel-absoluta-local](https://github.com/mostorer/bentel-absoluta-local).
 
----
+### Claude Code
 
-## 🤝 Collaborazioni e pull request
-Questo progetto è attivamente sviluppato per uso professionale. Contributi e miglioramenti sono benvenuti su:
+Nelle issue e nelle pull request si può scrivere `@claude` per far intervenire
+[Claude Code](https://github.com/anthropics/claude-code-action) (workflow
+`.github/workflows/claude.yml`).
 
-📎 https://github.com/valerix85/bentelalarm_for_ha
+<details>
+<summary>Setup del workflow Claude con GitHub App personalizzata</summary>
 
----
+1. Crea una GitHub App (*Settings → Developer settings → GitHub Apps*) con permessi di
+   repository **Contents**, **Issues**, **Pull requests** in *Read & write*.
+2. Genera una *private key* (`.pem`) e installa la App su questo repository.
+3. In *Settings → Secrets and variables → Actions* aggiungi: `APP_ID`, `APP_PRIVATE_KEY`
+   (contenuto del `.pem`) e `ANTHROPIC_API_KEY`.
+
+Guida completa: <https://github.com/anthropics/claude-code-action/blob/main/docs/setup.md>
+</details>
+
+## Contributi
+
+Issue e pull request sono benvenute: <https://github.com/valerix85/bentelalarm_for_ha>
