@@ -234,7 +234,7 @@ class FakePanel:
         elif cmd == Cmd.EXIT_ACCESS_LEVEL:
             # Absoluta finalises programming writes at log-out
             for zone, on in self.pending_bypass.items():
-                self.log_event(0x4000 if on else 0x4001, who=zone)
+                self.log_event(0x4000 if on else 0x4001, who=zone - 1)  # WHO is 0-based
                 self.zone_raw[zone] = (
                     (self.zone_raw[zone] | 0x80) if on else (self.zone_raw[zone] & 0x7F)
                 )

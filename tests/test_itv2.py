@@ -313,7 +313,7 @@ async def test_event_log_time_sync_and_partition_zones():
         assert [e.text() for e in client.last_events] == ["Inser. eseguito"]
         logged = []
         client.add_event_listener(lambda t, d: logged.append((t, d)))
-        panel.log_event(0x1007, who=3)  # zone alarm, zone 3
+        panel.log_event(0x1007, who=2)  # zone alarm, zone 3
         panel.log_event(0x3818, where=0x0A)  # restore: panel no battery
         await client.check_events()
         texts = [d["text"] for t, d in logged if t == "log"]

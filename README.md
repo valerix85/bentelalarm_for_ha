@@ -1,78 +1,76 @@
-# Bentel Absoluta per Home Assistant
+# Bentel Absoluta for Home Assistant
 
-Integrazione personalizzata per Home Assistant che si collega **localmente** alla centrale
-**Bentel Absoluta** tramite il modulo **ABS-IP**, usando il protocollo **ITv2** su TCP
-(nessun cloud, nessun bridge MQTT).
+Custom Home Assistant integration that connects **locally** to a **Bentel Absoluta** alarm panel
+through the **ABS-IP** module, using the **ITv2** protocol over TCP
+(no cloud, no MQTT bridge).
 
-> Richiede che sull'ABS-IP sia abilitato il protocollo ITv2 (porta TCP predefinita **3064**,
-> cifratura disabilitata) e il PIN di un utente Master, Normale o Limitato.
+> Requires the ITv2 protocol to be enabled on the ABS-IP (default TCP port **3064**,
+> encryption disabled) and the PIN of a Master, Normal or Limited user.
 
-## Funzionalità
+## Features
 
-| Piattaforma | Cosa espone |
+| Platform | What it provides |
 |---|---|
-| `alarm_control_panel` | **Globale**: inserisce/disinserisce tutte le aree dell'utente con un solo comando (stato combinato; se solo alcune aree sono inserite: "Attivo con bypass personalizzato" + attributi `armed_partitions`/`disarmed_partitions`). Poi un'entità per ogni **area** assegnata all'utente: di default solo **inserimento totale** ("Fuori casa") e disinserimento; opzionalmente anche Parziale ("In casa" = *stay*) e Notte (= *stay istantaneo*). Stati `arming` (tempo di uscita), `pending` (tempo di ingresso), `triggered`. |
-| `binary_sensor` | Una per ogni **zona** (aperta/chiusa, con attributi allarme, memoria, sabotaggio, guasto, batteria bassa, esclusa); per ogni area *guasti* e *pronta*; stato della **connessione**. |
-| `sensor` | **Ultimo evento** del registro della centrale (es. "Inser. eseguito", "Allarme di zona – Fin studio"), con data/ora e gli ultimi 5 eventi negli attributi. Ogni nuovo evento è anche emesso come `bentel_absoluta_event` con `type: log`. |
-| `switch` | Le **uscite programmabili** abilitate per l'utente e l'**esclusione** di ogni zona ("Esclusione Divano"…). L'esclusione viene applicata dalla centrale al logout, quindi l'integrazione fa logout e nuovo login in automatico (qualche secondo). Non creati se è attiva l'opzione *Richiedi il codice*. |
-| `button` | I **comandi remoti**, le **modalità di inserimento A-D** (globali), *cancella memoria allarmi*, *cancella allarmi/guasti/sabotaggi*, *sincronizza orologio* (imposta sulla centrale l'ora di Home Assistant). |
-| Eventi | `bentel_absoluta_event` con `type`: `arming`, `blocking_condition` (es. mancanza rete che impedisce l'inserimento), `trouble`, `arming_pre_alert`. |
-| Diagnostica | Download dalla pagina del dispositivo (PIN oscurato). |
+| `alarm_control_panel` | **All partitions**: arms/disarms every partition of the user with a single command (combined state; when only some partitions are armed the state is "armed custom bypass" with `armed_partitions`/`disarmed_partitions` attributes). Plus one entity per **partition** assigned to the user: by default only **away** arming and disarm; optionally also Home (*stay*) and Night (*instant stay*). States `arming` (exit delay), `pending` (entry delay), `triggered`. |
+| `binary_sensor` | One per **zone** (open/closed, with alarm, memory, tamper, fault, low battery and bypassed attributes); panel-wide **troubles**; per-partition *troubles* and *ready* (disabled by default); **connection** status. |
+| `sensor` | **Last event** from the panel event log (e.g. "Arming OK", "Zone alarm – Kitchen window"), with timestamp and the last 5 events as attributes. Each new event is also fired as `bentel_absoluta_event` with `type: log`. |
+| `switch` | The **programmable outputs** enabled for the user and **bypass** of each zone. The panel applies a bypass at log-out, so the integration logs out and back in automatically (a few seconds). |
+| `button` | **Remote commands**, **arming modes A-D** (global), *clear alarm memory*, *clear alarms/troubles/tampers*, *sync clock* (sets Home Assistant's time on the panel). |
+| Events | `bentel_absoluta_event` with `type`: `arming`, `blocking_condition` (e.g. mains failure preventing arming), `trouble`, `arming_pre_alert`, `log`. |
+| Diagnostics | Download from the device page (PIN redacted). |
 
-I nomi di aree, zone, uscite e modalità di inserimento vengono letti dalla centrale.
+Partition, zone, output and arming mode names are read from the panel.
+The UI is translated into English and Italian; event texts follow Home Assistant's language.
 
-## Installazione
+## Installation
 
-**HACS** (consigliato): *HACS → Integrazioni → ⋮ → Repository personalizzati* →
-`https://github.com/valerix85/bentelalarm_for_ha`, categoria *Integrazione*, poi installa
-*Bentel Absoluta* e riavvia Home Assistant.
+**HACS** (recommended): *HACS → ⋮ → Custom repositories* →
+`https://github.com/valerix85/bentelalarm_for_ha`, category *Integration*, then install
+*Bentel Absoluta* and restart Home Assistant.
 
-**Manuale**: copia `custom_components/bentel_absoluta/` nella cartella
-`<config>/custom_components/` e riavvia.
+**Manual**: copy `custom_components/bentel_absoluta/` into `<config>/custom_components/`
+and restart.
 
-Poi *Impostazioni → Dispositivi e servizi → Aggiungi integrazione → Bentel Absoluta* e inserisci
-IP dell'ABS-IP, porta e PIN utente.
+Then *Settings → Devices & services → Add integration → Bentel Absoluta* and enter the
+ABS-IP address, port and user PIN.
 
-### Opzioni
+### Options
 
-- **Intervallo di lettura dello stato** (default 5 s): l'ABS-IP *non* notifica spontaneamente
-  l'apertura/chiusura delle zone, quindi vengono lette periodicamente. Lo stesso polling fa da
-  keep-alive raccomandato dalla guida Bentel.
-- **Modalità di inserimento proposte** (default: solo *Fuori casa* = inserimento totale): aggiungi
-  *In casa* (parziale) e *Notte* (parziale istantaneo) solo se le usi sulla centrale, e
-  *Forzato* (inserimento totale anche con zone aperte, che vengono escluse; in Home Assistant
-  appare come "bypass personalizzato") solo se ti serve davvero.
-  I nomi "Fuori casa / In casa / Notte" sono quelli standard di Home Assistant.
-- **Richiedi il codice**: se attivo, le entità allarme chiedono il PIN per inserire/disinserire
-  e i pulsanti delle modalità A-D non vengono creati.
+- **Status polling interval** (default 5 s): the ABS-IP does *not* notify zone open/close
+  changes, so zones are polled. The same polling acts as the keep-alive recommended by the
+  Bentel guide.
+- **Arming modes offered** (default: *Away* only): add *Home* (stay) and *Night* (instant stay)
+  only if you use them on the panel, and *Forced* (away arming even with open zones, which are
+  bypassed; shown in Home Assistant as "custom bypass") only if you really need it.
+- **Require code**: when enabled, the alarm entities ask for the PIN to arm/disarm, and the
+  arming mode A-D buttons and zone bypass switches are not created.
 
-## Cose da sapere
+## Good to know
 
-- L'ABS-IP accetta **una sola connessione ITv2** alla volta.
-- La sessione ITv2 ha la **priorità più bassa**: quando si collega BOSS o l'app mobile la
-  centrale la chiude. L'integrazione si ricollega da sola (back-off da 10 s a 5 min).
-- Vengono esposte solo le aree/zone/uscite assegnate all'utente del PIN configurato.
-- La cifratura AES dell'ABS-IP non è supportata: lasciala disabilitata per il client ITv2.
+- The ABS-IP accepts **a single ITv2 connection** at a time.
+- The ITv2 session has the **lowest priority**: when BOSS or the mobile app connects, the panel
+  closes it. The integration reconnects by itself (back-off from 10 s to 5 min).
+- Only the partitions/zones/outputs assigned to the configured user are exposed.
+- ABS-IP AES encryption is not supported: keep it disabled for the ITv2 client.
 
-## Limitazioni note
+## Known limitations
 
-- **Stato zone oltre il limite del modello**: la centrale dichiara via ITv2 un numero massimo di
-  zone (es. 16 su Absoluta 16). Anche se da BOSS sono configurate più zone (es. radio 17-20),
-  l'ABS-IP restituisce lo stato solo delle prime N: le altre non vengono create (il motivo è
-  visibile nella diagnostica, voce `invalid_zone_reasons`). Soluzione: usare per i sensori
-  importanti gli slot entro il limite.
-- **Uscite**: sono esposte solo le uscite *riservate* all'area con un'azione programmata
-  (è la centrale a decidere quali rendere disponibili a ITv2).
-- **Esclusione zone**: la centrale la applica al logout e poi chiude la sessione; l'integrazione
-  si ricollega da sola, per cui ogni esclusione richiede qualche secondo.
-- **Inserimento rifiutato**: se una zona è aperta (o c'è una condizione di blocco) la centrale
-  rifiuta l'inserimento; Home Assistant mostra l'errore con l'elenco delle zone aperte
-  (dell'area interessata, se la centrale fornisce l'associazione zone-aree) e lo
-  stato resta invariato. Con l'entità *Globale* alcune aree potrebbero inserirsi e altre no:
-  lo stato diventa parziale e gli attributi indicano quali.
-- **Una sola connessione ITv2** e priorità più bassa di BOSS/app (vedi sopra).
+- **Zone status beyond the model limit**: over ITv2 the panel reports a maximum number of zones
+  (e.g. 16 on an Absoluta 16). Even if more zones are configured in BOSS (e.g. wireless 17-20),
+  the ABS-IP only returns the status of the first N: the others are not created (the reason is
+  shown in the diagnostics, `invalid_zone_reasons`). Workaround: use slots within the limit for
+  important sensors.
+- **Outputs**: only outputs *reserved* to the partition with a programmed action are exposed
+  (the panel decides which ones are available to ITv2).
+- **Zone bypass**: the panel applies it at log-out and then closes the session; the integration
+  reconnects automatically, so each bypass takes a few seconds.
+- **Arming refused**: if a zone is open (or a blocking condition is present) the panel refuses
+  to arm; Home Assistant shows the error with the list of open zones (of that partition, when
+  the panel provides the zone-partition assignment) and the state is unchanged. With the
+  *All partitions* entity some partitions may arm and others not: the state becomes partial
+  and the attributes tell which.
 
-## Debug
+## Debugging
 
 ```yaml
 logger:
@@ -81,23 +79,25 @@ logger:
     custom_components.bentel_absoluta: debug
 ```
 
-In debug vengono registrati tutti i pacchetti trasmessi/ricevuti (`TX`/`RX`) in esadecimale:
-allegali alle issue insieme al file di diagnostica.
+With debug logging every transmitted/received packet (`TX`/`RX`) is logged in hex:
+attach it to issues together with the diagnostics file.
 
-## Sviluppo
+## Development
 
 ```
 custom_components/bentel_absoluta/
-├── itv2/            # libreria protocollo, senza dipendenze da Home Assistant
-│   ├── framing.py   # 0x7E/0x7F, escape 7D 00/01/02, lunghezza, CRC-16/CCITT-FALSE
-│   ├── messages.py  # codifica/decodifica dei comandi usati da Absoluta
-│   └── client.py    # sessione asyncio: sequenze/ACK, handshake, login, polling, comandi
-├── alarm_control_panel.py, binary_sensor.py, switch.py, button.py
-└── config_flow.py   # setup, reauth, riconfigurazione, opzioni
+├── itv2/            # protocol library, no Home Assistant dependencies
+│   ├── framing.py   # 0x7E/0x7F, 7D 00/01/02 escaping, length, CRC-16/CCITT-FALSE
+│   ├── messages.py  # encoding/decoding of the commands used by Absoluta
+│   ├── events.py    # event log decoding (Appendix B texts)
+│   └── client.py    # asyncio session: sequences/ACKs, handshake, login, polling, commands
+├── alarm_control_panel.py, binary_sensor.py, sensor.py, switch.py, button.py
+└── config_flow.py   # setup, reauth, reconfigure, options
 tests/
-├── fake_panel.py    # simulatore di centrale Absoluta (server TCP ITv2)
-├── test_itv2.py     # test del protocollo
-└── test_integration.py  # test in Home Assistant reale
+├── fake_panel.py    # Absoluta panel simulator (ITv2 TCP server)
+├── test_itv2.py     # protocol tests
+└── test_integration.py  # tests inside a real Home Assistant
+scripts/diagnose.py  # standalone connection test against a real panel
 ```
 
 ```bash
@@ -105,33 +105,33 @@ pip install pytest-homeassistant-custom-component
 pytest
 ```
 
-Riferimenti: *Interactive Protocol V2.00 R2.03* e *ITv2 Usage Guide for Absoluta Rev 1.05*
-(Tyco / Bentel Security). Formati e sequenza di sessione sono stati verificati anche
-confrontandoli con il bridge Java open source
+References: *Interactive Protocol V2.00 R2.03* and *ITv2 Usage Guide for Absoluta Rev 1.05*
+(Tyco / Bentel Security). Message formats and the session sequence were also cross-checked
+against the open-source Java bridge
 [mostorer/bentel-absoluta-local](https://github.com/mostorer/bentel-absoluta-local).
 
 ### Claude Code
 
-Nelle issue e nelle pull request si può scrivere `@claude` per far intervenire
+In issues and pull requests you can write `@claude` to get help from
 [Claude Code](https://github.com/anthropics/claude-code-action) (workflow
 `.github/workflows/claude.yml`).
 
 <details>
-<summary>Setup del workflow Claude con GitHub App personalizzata</summary>
+<summary>Setting up the Claude workflow with a custom GitHub App</summary>
 
-1. Crea una GitHub App (*Settings → Developer settings → GitHub Apps*) con permessi di
-   repository **Contents**, **Issues**, **Pull requests** in *Read & write*.
-2. Genera una *private key* (`.pem`) e installa la App su questo repository.
-3. Crea una chiave API su <https://console.anthropic.com> (serve credito prepagato).
-4. In *Settings → Secrets and variables → Actions* aggiungi: `APP_ID`, `APP_PRIVATE_KEY`
-   (contenuto del `.pem`) e `ANTHROPIC_API_KEY` (la chiave del punto 3).
-   In alternativa alla chiave API puoi usare il token di un abbonamento Claude Pro/Max
-   (`claude setup-token` → secret `CLAUDE_CODE_OAUTH_TOKEN` e, nel workflow,
-   `claude_code_oauth_token:` al posto di `anthropic_api_key:`).
+1. Create a GitHub App (*Settings → Developer settings → GitHub Apps*) with repository
+   permissions **Contents**, **Issues**, **Pull requests** set to *Read & write*.
+2. Generate a *private key* (`.pem`) and install the App on this repository.
+3. Create an API key at <https://console.anthropic.com> (prepaid credit required).
+4. In *Settings → Secrets and variables → Actions* add `APP_ID`, `APP_PRIVATE_KEY`
+   (contents of the `.pem`) and `ANTHROPIC_API_KEY` (the key from step 3).
+   Instead of an API key you can use a Claude Pro/Max subscription token
+   (`claude setup-token` → secret `CLAUDE_CODE_OAUTH_TOKEN` and, in the workflow,
+   `claude_code_oauth_token:` instead of `anthropic_api_key:`).
 
-Guida completa: <https://github.com/anthropics/claude-code-action/blob/main/docs/setup.md>
+Full guide: <https://github.com/anthropics/claude-code-action/blob/main/docs/setup.md>
 </details>
 
-## Contributi
+## Contributing
 
-Issue e pull request sono benvenute: <https://github.com/valerix85/bentelalarm_for_ha>
+Issues and pull requests are welcome: <https://github.com/valerix85/bentelalarm_for_ha>

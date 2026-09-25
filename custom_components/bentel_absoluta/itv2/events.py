@@ -359,11 +359,11 @@ class PanelEvent:
     def zone(self) -> int | None:
         """Zone number the event refers to (None when not a zone event).
 
-        Assumes WHO is the 1-based zone number, as in the WLS zone mapping of
-        Appendix C (Wireless Zone Label [WHO - 0F]).
+        WHO is the 0-based zone index (verified on an Absoluta 16, fw 3.60:
+        bypassing zone 6 logs WHO 5).
         """
-        if self.where == 0 and (self.cls, self.code) in ZONE_WHO and self.who not in (0, 0xFF):
-            return self.who
+        if self.where == 0 and (self.cls, self.code) in ZONE_WHO and self.who != 0xFF:
+            return self.who + 1
         return None
 
     @property
@@ -371,6 +371,12 @@ class PanelEvent:
         if self.where == 0 and (self.cls, self.code) in PARTITION_WHO and self.who not in (0, 0xFF):
             return self.who
         return None
+
+    @property
+    def documented(self) -> bool:
+        """False for codes the guide leaves blank (e.g. class 0 code 0x0D, logged
+        by the panel around bypass changes): meaningless to the user."""
+        return (self.cls, self.code) in EVENT_TEXT
 
     def text(self, italian: bool = True) -> str:
         idx = 0 if italian else 1

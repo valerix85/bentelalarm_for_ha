@@ -10,5 +10,5 @@
   "issue_tracker": "https://github.com/valerix85/bentelalarm_for_ha/issues",
   "loggers": ["custom_components.bentel_absoluta"],
   "requirements": [],
-  "version": "0.3.1"
+  "version": "0.3.3"
 }

@@ -37,17 +37,21 @@ class BentelLastEvent(BentelEntity, SensorEntity):
             text += f" – {self.client.partition_labels.get(event.partition, event.partition)}"
         return text[:255]
 
+    def _latest(self):
+        """Most recent documented event (undocumented codes are skipped)."""
+        events = self.client.last_events
+        return next((e for e in events if e.documented), events[0] if events else None)
+
     @property
     def native_value(self) -> str | None:
-        if not self.client.last_events:
-            return None
-        return self._describe(self.client.last_events[0])
+        event = self._latest()
+        return self._describe(event) if event else None
 
     @property
     def extra_state_attributes(self) -> dict:
-        if not self.client.last_events:
+        event = self._latest()
+        if event is None:
             return {}
-        event = self.client.last_events[0]
         ts = (
             event.timestamp.replace(tzinfo=dt_util.get_default_time_zone()).isoformat()
             if event.timestamp

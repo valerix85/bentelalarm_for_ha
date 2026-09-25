@@ -257,11 +257,19 @@ async def test_new_features(hass: HomeAssistant, panel: FakePanel) -> None:
     # log events are fired on the bus
     fired = []
     hass.bus.async_listen("bentel_absoluta_event", lambda e: fired.append(e.data))
-    panel.log_event(0x1007, who=3)
+    panel.log_event(0x1007, who=2)
     await entry.runtime_data.check_events()
     await hass.async_block_till_done()
     assert any(d["type"] == "log" and d["zone"] == 3 for d in fired)
     assert hass.states.get(sensors[0].entity_id).state.startswith("Allarme di zona")
+
+    # undocumented codes (class 0 code 0x0D) do not replace the last event
+    panel.log_event(0x000D)
+    await entry.runtime_data.check_events()
+    await hass.async_block_till_done()
+    state = hass.states.get(sensors[0].entity_id)
+    assert state.state.startswith("Allarme di zona")
+    assert state.attributes["recent"][0] == "Generico 0x0D"
 
     # forced arming offered as custom bypass and works with an open zone
     panel.zone_raw[3] = 0x01

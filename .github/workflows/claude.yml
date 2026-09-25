@@ -1,10 +1,10 @@
 name: Claude with Custom App
 
-# Invoca Claude Code scrivendo "@claude" in un commento di issue/PR,
-# in una review o nel titolo/corpo di una nuova issue.
+# Runs Claude Code when "@claude" is written in an issue/PR comment,
+# in a review or in the title/body of a new issue.
 # Setup: https://github.com/anthropics/claude-code-action/blob/main/docs/setup.md
-# Secret richiesti: APP_ID, APP_PRIVATE_KEY, ANTHROPIC_API_KEY
-# (chiave API da https://console.anthropic.com, con credito disponibile)
+# Required secrets: APP_ID, APP_PRIVATE_KEY, ANTHROPIC_API_KEY
+# (API key from https://console.anthropic.com, with available credit)
 
 on:
   issue_comment:
@@ -27,14 +27,14 @@ jobs:
     permissions:
       contents: read
       id-token: write
-      actions: read # per leggere i risultati della CI sulle PR
+      actions: read # to read CI results on PRs
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
           fetch-depth: 1
 
-      # Genera un token dalla GitHub App personalizzata
+      # Generate a token from the custom GitHub App
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v2
@@ -42,14 +42,14 @@ jobs:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
-      # Esegue Claude con il token della App (commenti/commit a nome della App)
+      # Run Claude with the App token (comments/commits made as the App)
       - name: Run Claude Code
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ steps.app-token.outputs.token }}
-          # Sonnet: costa meno e non richiede il contesto da 1M token
-          # (che con una chiave API di tier basso viene rifiutato)
+          # Sonnet: cheaper, and does not need the 1M-token context
+          # (which low-tier API keys may not have access to)
           claude_args: |
             --model claude-sonnet-5
             --max-turns 30

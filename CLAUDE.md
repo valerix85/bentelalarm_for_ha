@@ -1,51 +1,58 @@
-# Note per Claude Code
+# Notes for Claude Code
 
-Integrazione Home Assistant per centrali Bentel Absoluta via ABS-IP, protocollo ITv2 su TCP.
+Home Assistant integration for Bentel Absoluta panels via ABS-IP, ITv2 protocol over TCP.
+The repository is English-only (code, comments, docs); Italian is used only in
+`translations/it.json` and in the panel's Italian event texts (`itv2/events.py`).
 
-## Struttura
-- `custom_components/bentel_absoluta/itv2/`: libreria protocollo pura (nessun import di HA).
-- Piattaforme HA: `alarm_control_panel`, `binary_sensor`, `switch`, `button`; `config_flow.py`.
-- `tests/fake_panel.py` simula la centrale: ogni nuovo comando va aggiunto anche lì e coperto
-  da un test. Eseguire `pytest` (richiede `pytest-homeassistant-custom-component`, Python 3.13).
+## Layout
+- `custom_components/bentel_absoluta/itv2/`: pure protocol library (no HA imports).
+- HA platforms: `alarm_control_panel`, `binary_sensor`, `sensor`, `switch`, `button`; `config_flow.py`.
+- `tests/fake_panel.py` simulates the panel: every new command must be added there too and
+  covered by a test. Run `pytest` (requires `pytest-homeassistant-custom-component`, Python 3.13).
 
-## Fatti di protocollo verificati (non "correggerli")
-- Frame: `7E | escape(LEN SEQ RSEQ CMD[2] [APPSEQ] DATI CRC_HI CRC_LO) | 7F`.
-  Escape: 7D→7D 00, 7E→7D 01, 7F→7D 02 (NON xor 0x20).
-- LEN conta SEQ, RSEQ, dati e i 2 byte di CRC (ACK semplice = LEN 4). CRC-16/CCITT-FALSE
-  (poly 0x1021, init 0xFFFF) calcolato su LEN + contenuto.
-- Sequenze: il primo pacchetto ha SEQ 0, poi 1..255 e si riparte da 1. Ogni pacchetto non vuoto
-  va confermato (ACK semplice con SEQ invariato e RSEQ = seq ricevuto).
-- Handshake: 060A ↔ 060A, 060E ↔ 060E (con 0502 a ogni comando con app-seq), 060D ↔ 060D,
-  poi login 0400 con PIN BCD riempito a 0xA ("1234" → AA 12 34). Nessuna cifratura.
-- Stato area 0812, byte 1: **bit0 = inserita**; se inserita bit1 stay, bit2 away, bit3 night,
-  bit4 senza ritardo ingresso, bit5 tempo uscita, bit6 tempo ingresso; se disinserita bit1 pronta.
-  La tabella del PDF è impaginata da destra: non usare bit7 come "inserita".
-- Stato zona 0811: bit0 aperta, 1 sabotaggio, 2 guasto, 3 batteria, 4 inattività, 5 allarme,
-  6 memoria, 7 esclusa. Le zone NON sono notificate: vanno lette in polling.
-- Alcune centrali non rispondono a letture multi-zona: il client passa a letture singole.
-- Uscite 1..50, comandi remoti = uscita 56 + n. Etichette via 0800/0771 in Windows-1252.
-- 0771 (verificato su Absoluta 16 fw 3.60.37): il campo "data length" è la lunghezza TOTALE del
-  blocco richiesto (8 etichette -> 0x80), non della singola etichetta. Il parser gestisce entrambi.
-- NON filtrare le zone con "max zones" di 0613: una Absoluta 16 (fw 3.60.37) ha zone radio
-  17, 18, 20 configurate. La maschera 0770 riflette le zone abilitate (la 19 disabilitata non c'è).
-  Le zone che la centrale rifiuta o non riporta vengono scartate dopo averle lette singolarmente;
-  se una risposta multi-zona è troncata, le zone mancanti vengono lette una per una a ogni poll.
-- L'etichetta di sistema (0771 opzione 3, offset 1) è il testo salvaschermo della tastiera:
-  non usarla come nome del dispositivo.
-- Esclusione zona 074A: Absoluta la applica solo al logout (0401), e dopo il logout l'ABS-IP
-  CHIUDE la connessione TCP (verificato fw 3.60.37): si fa una riconnessione immediata "pianificata"
-  senza mostrare le entità come non disponibili.
-- Etichette: la centrale può rifiutare un blocco (es. zone >16 su Absoluta 16); ogni blocco è
-  indipendente e in caso di rifiuto si ritenta elemento per elemento.
-- Stato zone oltre max_zones (0613): su Absoluta 16 fw 3.60.37 una richiesta 0811 per la zona 17
-  (o 18, 20) riceve comunque la risposta con le zone 1..16. Lo stato delle zone >16 NON è
-  disponibile via ITv2 (le etichette sì). Non è un bug del client.
-- Registro eventi 0101/4101: record da 13 byte = data(4) flags(1) event id(2: classe<<12 |
-  ripristino<<11 | codice) indice(2: where, who) maschera aree(4, contano gli ultimi 2 byte).
-  Verificato sugli esempi della guida. DA VERIFICARE su centrale reale: WHO = numero zona 1-based
-  per gli eventi di zona (ipotesi da Appendice C).
-- Zone per area: 0800 -> 0770 con area != 0 (fw >= 3.50.80). Se non risponde si usa l'elenco globale.
-- Ora centrale: 0741 con data/ora ITv2 in ora locale.
-- Ogni login dell'integrazione (anche la riconnessione dopo un'esclusione) viene registrato dalla
-  centrale come "Riconosciuto Cod" (classe 0, codice 0x15): il client lo riconosce (uno per login,
-  il più recente) e non lo mostra né lo notifica, altrimenti coprirebbe l'evento interessante.
+## Verified protocol facts (do not "fix" them)
+- Frame: `7E | escape(LEN SEQ RSEQ CMD[2] [APPSEQ] DATA CRC_HI CRC_LO) | 7F`.
+  Escaping: 7D→7D 00, 7E→7D 01, 7F→7D 02 (NOT xor 0x20).
+- LEN counts SEQ, RSEQ, data and the 2 CRC bytes (simple ACK = LEN 4). CRC-16/CCITT-FALSE
+  (poly 0x1021, init 0xFFFF) computed over LEN + content.
+- Sequences: the first packet has SEQ 0, then 1..255 wrapping to 1. Every non-empty packet
+  must be acknowledged (simple ACK with unchanged SEQ and RSEQ = received seq).
+- Handshake: 060A ↔ 060A, 060E ↔ 060E (with 0502 for every command carrying an app-seq),
+  060D ↔ 060D, then login 0400 with the PIN in BCD padded with 0xA ("1234" → AA 12 34).
+  No encryption.
+- Partition status 0812, byte 1: **bit0 = armed**; when armed bit1 stay, bit2 away, bit3 night,
+  bit4 no entry delay, bit5 exit delay, bit6 entry delay; when disarmed bit1 ready.
+  The PDF table is laid out right-to-left: do not use bit7 as "armed".
+- Zone status 0811: bit0 open, 1 tamper, 2 fault, 3 low battery, 4 delinquency, 5 alarm,
+  6 memory, 7 bypassed. Zones are NOT notified: they must be polled.
+- Some panels do not answer multi-zone reads: the client falls back to single reads.
+- Outputs 1..50, remote commands = output 56 + n. Labels via 0800/0771 in Windows-1252.
+- 0771 (verified on Absoluta 16 fw 3.60.37): the "data length" field is the TOTAL length of the
+  requested block (8 labels -> 0x80), not of a single label. The parser handles both.
+- Do NOT filter zones with the 0613 "max zones": an Absoluta 16 (fw 3.60.37) has wireless zones
+  17, 18, 20 configured. The 0770 mask reflects enabled zones (disabled 19 is absent).
+  Zones the panel refuses or does not report are dropped after reading them singly;
+  if a multi-zone answer is truncated, the missing zones are read one by one at every poll.
+- The system label (0771 option 3, offset 1) is the keypad screensaver text:
+  do not use it as the device name.
+- Zone bypass 074A: Absoluta applies it only at log-out (0401), and after log-out the ABS-IP
+  CLOSES the TCP connection (verified fw 3.60.37): the client does an immediate "planned"
+  reconnect without marking entities unavailable.
+- Labels: the panel may refuse a block (e.g. zones >16 on Absoluta 16); each block is
+  independent and on refusal it is retried item by item.
+- Zone status beyond max_zones (0613): on Absoluta 16 fw 3.60.37 a 0811 request for zone 17
+  (or 18, 20) is answered with zones 1..16 anyway. Status of zones >16 is NOT available
+  over ITv2 (labels are). This is not a client bug.
+- Event log 0101/4101: 13-byte records = timestamp(4) flags(1) event id(2: class<<12 |
+  restore<<11 | code) index(2: where, who) partition mask(4, only the last 2 bytes matter).
+  Verified against the guide's examples. In zone events WHO is the 0-based zone index
+  (verified on Absoluta 16 fw 3.60: bypassing zone 6 -> WHO 5). A bypass done via ITv2 (074A)
+  is logged as "Isolata zona" / "Zone Isolated" (class 4, code 0x03); removing it logs the restore
+  of that event plus class 0 code 0x0D, which the guide leaves blank: the "Last event" sensor
+  skips undocumented codes.
+- Zones per partition: 0800 -> 0770 with partition != 0 (fw >= 3.50.80). If unanswered the
+  global list is used.
+- Panel clock: 0741 with ITv2 date/time in local time.
+- Every integration login (including the reconnect after a bypass) is logged by the panel as
+  "Riconosciuto Cod" (class 0, code 0x15): the client recognises it (one per login, the most
+  recent) and neither shows nor fires it, otherwise it would hide the interesting event.
