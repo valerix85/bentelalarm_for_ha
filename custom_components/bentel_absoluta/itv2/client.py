@@ -83,6 +83,18 @@ class ConnectionFailed(ITv2Error):
     """TCP connection or session establishment failed."""
 
 
+class TcpConnectFailed(ConnectionFailed):
+    """The TCP connection itself could not be opened."""
+
+
+class HandshakeFailed(ConnectionFailed):
+    """TCP is up but the ITv2 handshake/login did not complete."""
+
+    def __init__(self, message: str, *, stage: str = "") -> None:
+        super().__init__(message)
+        self.stage = stage
+
+
 class AuthenticationFailed(ITv2Error):
     """The panel rejected the user PIN."""
 
@@ -155,6 +167,8 @@ class AbsolutaClient:
         self.remote_commands: list[int] = []  # remote commands 1..32
         self.outputs_on: set[int] = set()
         self.exit_delay: set[int] = set()
+        # Partitions with an accepted arm command not yet confirmed by 0812
+        self.arming_requested: set[int] = set()
         self.entry_delay: set[int] = set()
         self.zone_labels: dict[int, str] = {}
         self.partition_labels: dict[int, str] = {}
@@ -165,6 +179,10 @@ class AbsolutaClient:
         self.panel_time = None
         self.gsm_signal: int | None = None
         self.connected = False
+        self.stage = "idle"
+        self.rx_packets = 0
+        self.invalid_zones: set[int] = set()
+        self.invalid_zone_reasons: dict[int, str] = {}
 
         # Listeners
         self._listeners: list[Callable[[], None]] = []
@@ -194,6 +212,9 @@ class AbsolutaClient:
         self._refresh_requested = asyncio.Event()
         self._stopping = False
         self._background: set[asyncio.Task] = set()
+        self._reply_tasks: dict[int, asyncio.Task] = {}
+        self._reconnect_now = False
+        self._labels_loaded = False
 
     # ------------------------------------------------------------------
     # Listener API
@@ -247,28 +268,62 @@ class AbsolutaClient:
             self._supervisor = None
         await self.disconnect()
 
-    async def connect(self) -> None:
-        """Open the TCP connection and run handshake, login and discovery."""
+    async def connect(self, *, discover: bool = True) -> None:
+        """Open the TCP connection and run handshake, login and discovery.
+
+        With ``discover=False`` only handshake and login are performed
+        (used by the config flow to validate host and PIN).
+        """
         self._reset_session()
+        self.stage = "tcp_connect"
+        self.rx_packets = 0
         try:
             self._reader, self._writer = await asyncio.wait_for(
                 asyncio.open_connection(self.host, self.port), self._connect_timeout
             )
         except (TimeoutError, OSError) as err:
-            raise ConnectionFailed(f"cannot connect to {self.host}:{self.port}: {err}") from err
+            raise TcpConnectFailed(
+                f"TCP connection to {self.host}:{self.port} failed: {err or 'timeout'}"
+            ) from err
+        _LOGGER.debug("TCP connected to %s:%s", self.host, self.port)
         self._closed_event.clear()
         self._read_task = asyncio.create_task(self._read_loop(), name="absoluta-reader")
         try:
             await self._handshake()
+            self.stage = "login"
             await self._login()
-            await self._discover()
-            await self.refresh()
         except AuthenticationFailed:
             await self._close_transport()
             raise
         except (TimeoutError, ITv2Error, OSError) as err:
             await self._close_transport()
-            raise ConnectionFailed(f"session setup failed: {err}") from err
+            detail = str(err) or type(err).__name__
+            raise HandshakeFailed(
+                f"ITv2 session failed at stage '{self.stage}' "
+                f"({self.rx_packets} packets received from panel): {detail}",
+                stage=self.stage,
+            ) from err
+        if discover:
+            # Discovery / first poll failures must not prevent the session.
+            self.stage = "discover"
+            try:
+                await self._discover()
+                self.stage = "first_poll"
+                await self.refresh()
+                await self._probe_missing_zones()
+                if self.invalid_zones:
+                    self.user_zones = [z for z in self.user_zones if z not in self.invalid_zones]
+            except (TimeoutError, ITv2Error) as err:
+                _LOGGER.warning(
+                    "Absoluta %s: %s failed (%s), continuing",
+                    self.host,
+                    self.stage,
+                    str(err) or type(err).__name__,
+                )
+                if self._closed_event.is_set():
+                    await self._close_transport()
+                    raise ConnectionFailed("connection closed during discovery") from err
+        self.stage = "connected"
         self._set_connected(True)
 
     async def disconnect(self) -> None:
@@ -291,6 +346,7 @@ class AbsolutaClient:
         self._app_seq = 0
         self._pending = None
         self._expected.clear()
+        self._reply_tasks.clear()
         self._single_zone_mode = False
         self.exit_delay.clear()
         self.entry_delay.clear()
@@ -328,29 +384,39 @@ class AbsolutaClient:
         """Poll while connected, reconnect with back-off when the link drops."""
         backoff = 10.0
         while not self._stopping:
+            planned = False
             if self.connected:
                 try:
                     await self._poll_loop()
                 except asyncio.CancelledError:
                     raise
                 except Exception as err:  # noqa: BLE001
-                    _LOGGER.warning("Connection to Absoluta %s lost: %s", self.host, err)
+                    planned = self._reconnect_now
+                    if planned:
+                        _LOGGER.debug("Planned reconnection to %s (%s)", self.host, err)
+                    else:
+                        _LOGGER.warning("Connection to Absoluta %s lost: %s", self.host, err)
                 await self._close_transport()
-                self._set_connected(False)
+                if not planned:
+                    self._set_connected(False)
                 backoff = 10.0
             if self._stopping:
                 break
-            _LOGGER.debug("Reconnecting to %s in %.0f s", self.host, backoff)
-            await asyncio.sleep(backoff)
+            delay = 0.5 if planned else backoff
+            self._reconnect_now = False
+            _LOGGER.debug("Reconnecting to %s in %.1f s", self.host, delay)
+            await asyncio.sleep(delay)
             try:
                 await self.connect()
                 _LOGGER.info("Reconnected to Absoluta %s", self.host)
             except AuthenticationFailed:
+                self._set_connected(False)
                 _LOGGER.error("Absoluta %s rejected the user PIN, giving up", self.host)
                 if self.on_auth_failed:
                     self.on_auth_failed()
                 return
             except ITv2Error as err:
+                self._set_connected(False)
                 _LOGGER.debug("Reconnect failed: %s", err)
                 backoff = min(backoff * 2, 300.0)
 
@@ -442,6 +508,7 @@ class AbsolutaClient:
 
     def _on_packet(self, pkt: Packet) -> None:
         _LOGGER.debug("RX seq=%d rseq=%d %s", pkt.seq, pkt.rseq, pkt.app.hex(" "))
+        self.rx_packets += 1
         self._last_ack = pkt.rseq
         self._ack_event.set()
         if pkt.is_ack:
@@ -475,10 +542,16 @@ class AbsolutaClient:
     # Application layer
     # ------------------------------------------------------------------
 
-    def _spawn(self, coro) -> None:
+    def _spawn(self, coro) -> asyncio.Task:
         task = asyncio.create_task(coro)
         self._background.add(task)
         task.add_done_callback(self._background.discard)
+        return task
+
+    async def _await_reply_sent(self, cmd: int) -> None:
+        task = self._reply_tasks.pop(cmd, None)
+        if task is not None:
+            await asyncio.wait_for(asyncio.shield(task), APP_TIMEOUT)
 
     async def _safe_send(self, app: bytes) -> None:
         try:
@@ -540,7 +613,9 @@ class AbsolutaClient:
     def _dispatch(self, cmd: int, app_seq: int | None, p: bytes) -> None:
         # Commands from the panel carrying an app sequence want a 0502 back.
         if app_seq is not None and cmd in (Cmd.OPEN_SESSION, Cmd.REQUEST_ACCESS):
-            self._spawn(
+            # The handshake awaits this task so that our 0502 always reaches
+            # the panel before we send the next handshake command.
+            self._reply_tasks[cmd] = self._spawn(
                 self._safe_send(Cmd.COMMAND_RESPONSE.to_bytes(2, "big") + bytes([app_seq, 0x00]))
             )
 
@@ -552,7 +627,9 @@ class AbsolutaClient:
 
         changed = False
         if cmd == Cmd.PARTITION_STATUS:
-            self.partitions.update(msg.parse_partition_status(p))
+            status = msg.parse_partition_status(p)
+            self.partitions.update(status)
+            self.arming_requested.difference_update(status)
             changed = True
         elif cmd == Cmd.ZONE_STATUS:
             self.zones.update(msg.parse_zone_status(p))
@@ -644,12 +721,19 @@ class AbsolutaClient:
     # ------------------------------------------------------------------
 
     async def _handshake(self) -> None:
+        self.stage = "open_session"
         panel_open = self._expect(Cmd.OPEN_SESSION)
         panel_access = self._expect(Cmd.REQUEST_ACCESS)
         await self._request(Cmd.OPEN_SESSION, msg.build_open_session())
+        self.stage = "wait_panel_open_session"
         await asyncio.wait_for(panel_open, APP_TIMEOUT)
+        await self._await_reply_sent(Cmd.OPEN_SESSION)
+        self.stage = "request_access"
         await self._request(Cmd.REQUEST_ACCESS, msg.build_request_access())
+        self.stage = "wait_panel_request_access"
         await asyncio.wait_for(panel_access, APP_TIMEOUT)
+        await self._await_reply_sent(Cmd.REQUEST_ACCESS)
+        self.stage = "software_version"
         version = self._expect(Cmd.SOFTWARE_VERSION)
         await self._send_app(Cmd.SOFTWARE_VERSION.to_bytes(2, "big") + msg.OWN_SOFTWARE_VERSION)
         try:
@@ -698,6 +782,9 @@ class AbsolutaClient:
             count = self.info.max_zones or MAX_ZONES
             _LOGGER.info("Zone assignment unavailable, using zones 1..%d", count)
             self.user_zones = list(range(1, min(count, MAX_ZONES) + 1))
+        # NB: do not filter by 0613 "max zones": an Absoluta 16 (fw 3.60.37) reports
+        # 16 but has radio zones 17, 18, 20 configured. Missing zones are
+        # detected by probing them after the first poll instead.
 
         # Outputs / remote commands enabled for the user
         try:
@@ -725,8 +812,9 @@ class AbsolutaClient:
                     lambda c, p: True if c == Cmd.COMMAND_OUTPUT_ACTIVATION else None,
                 )
 
-        if self._load_labels:
+        if self._load_labels and not self._labels_loaded:
             await self._read_labels()
+            self._labels_loaded = True
 
     @staticmethod
     def _section_matcher(section: int) -> Callable[[int, bytes], bytes | None]:
@@ -758,10 +846,23 @@ class AbsolutaClient:
     async def _read_labels_into(
         self, option: int, items: list[int], offset: int, target: dict[int, str]
     ) -> None:
+        """Read labels in blocks; a refused block is retried item by item and a
+        refused item is skipped, so one bad block never loses the other labels."""
         for first, count in _runs(items, LABEL_CHUNK):
-            labels = await self._read_label_range(
-                option, first + offset, first + offset + count - 1
-            )
+            try:
+                labels = await self._read_label_range(
+                    option, first + offset, first + offset + count - 1
+                )
+            except (TimeoutError, ITv2Error, ValueError) as err:
+                _LOGGER.debug("Labels %d/%d+%d refused (%s)", option, first, count, err)
+                if count == 1:
+                    continue
+                for item in range(first, first + count):
+                    with contextlib.suppress(TimeoutError, ITv2Error, ValueError):
+                        single = await self._read_label_range(option, item + offset, item + offset)
+                        if single and single[0]:
+                            target[item] = single[0]
+                continue
             for i, label in enumerate(labels):
                 if label:
                     target[first + i] = label
@@ -770,22 +871,19 @@ class AbsolutaClient:
         try:
             system = await self._read_label_range(OPT_PARTITION_LABEL, 1, 1)
             self.system_label = system[0] if system and system[0] else None
-            await self._read_labels_into(
-                OPT_PARTITION_LABEL, self.user_partitions, 1, self.partition_labels
-            )
-            await self._read_labels_into(OPT_ZONE_LABEL, self.user_zones, 0, self.zone_labels)
-            await self._read_labels_into(OPT_OUTPUT_LABEL, self.outputs, 0, self.output_labels)
-            await self._read_labels_into(
-                OPT_OUTPUT_LABEL,
-                self.remote_commands,
-                MAX_OUTPUTS,
-                self.remote_command_labels,
-            )
-            modes: dict[int, str] = {}
-            await self._read_labels_into(OPT_ARMING_MODE_LABEL, [1, 2, 3, 4], 0, modes)
-            self.arming_mode_labels = {"ABCD"[k - 1]: v for k, v in modes.items()}
         except (TimeoutError, ITv2Error, ValueError) as err:
-            _LOGGER.info("Could not read labels from panel (%s); using defaults", err)
+            _LOGGER.debug("System label not available: %s", err)
+        await self._read_labels_into(
+            OPT_PARTITION_LABEL, self.user_partitions, 1, self.partition_labels
+        )
+        await self._read_labels_into(OPT_ZONE_LABEL, self.user_zones, 0, self.zone_labels)
+        await self._read_labels_into(OPT_OUTPUT_LABEL, self.outputs, 0, self.output_labels)
+        await self._read_labels_into(
+            OPT_OUTPUT_LABEL, self.remote_commands, MAX_OUTPUTS, self.remote_command_labels
+        )
+        modes: dict[int, str] = {}
+        await self._read_labels_into(OPT_ARMING_MODE_LABEL, [1, 2, 3, 4], 0, modes)
+        self.arming_mode_labels = {"ABCD"[k - 1]: v for k, v in modes.items()}
 
     # ------------------------------------------------------------------
     # Status polling
@@ -808,37 +906,139 @@ class AbsolutaClient:
                 Cmd.PARTITION_STATUS, msg.build_partition_status_request(self.user_partitions)
             )
         run_len = 1 if self._single_zone_mode else MAX_ZONE_RUN
-        for first, count in _runs(self.user_zones, run_len):
+        zones = [z for z in self.user_zones if z not in self.invalid_zones]
+        for first, count in _runs(zones, run_len):
             try:
-                await self._request_status(
+                got = await self._request_status(
                     Cmd.ZONE_STATUS, msg.build_zone_status_request(first, count)
                 )
+                # Some panels truncate multi-zone answers (e.g. to 16 zones):
+                # read the zones left out one by one.
+                for zone in range(first, first + count):
+                    if zone not in got and zone in zones:
+                        await self._read_single_zone(zone)
+                continue
+            except CommandFailed as err:
+                if count == 1:
+                    self._zone_unavailable(first, err)
+                    continue
+                _LOGGER.debug(
+                    "Zone status %d..%d refused (%s), probing singly", first, first + count - 1, err
+                )
             except TimeoutError:
-                if count == 1 or self._single_zone_mode:
-                    raise
+                if count == 1:
+                    self._zone_timeout(first)
+                    continue
                 _LOGGER.warning(
                     "Panel did not answer a multi-zone status request, "
                     "switching to single-zone polling"
                 )
                 self._single_zone_mode = True
-                for zone in range(first, first + count):
-                    if zone in self.user_zones:
-                        await self._request_status(
-                            Cmd.ZONE_STATUS, msg.build_zone_status_request(zone, 1)
-                        )
+            for zone in range(first, first + count):
+                if zone in zones:
+                    await self._read_single_zone(zone)
+
+    async def _read_single_zone(self, zone: int) -> None:
+        try:
+            got = await self._request_status(
+                Cmd.ZONE_STATUS, msg.build_zone_status_request(zone, 1)
+            )
+            if zone not in got:
+                self._zone_unavailable(zone, f"answer did not include it: zones {sorted(got)}")
+        except CommandFailed as err:
+            self._zone_unavailable(zone, err)
+        except TimeoutError:
+            self._zone_timeout(zone)
+
+    async def _probe_missing_zones(self) -> None:
+        """Zones still without status after the first poll are checked one by one."""
+        for zone in [z for z in self.user_zones if z not in self.zones]:
+            if zone not in self.invalid_zones:
+                await self._read_single_zone(zone)
+
+    def _zone_unavailable(self, zone: int, reason: object) -> None:
+        """The panel refuses to report this zone: it does not exist on this model."""
+        if zone not in self.invalid_zones:
+            _LOGGER.warning(
+                "Zone %d is assigned to the user but the panel does not report its status "
+                "(%s); ignoring it. The ABS-IP reports status only up to the model's zone "
+                "limit (%s)",
+                zone,
+                reason,
+                self.info.max_zones or "unknown",
+            )
+            self.invalid_zones.add(zone)
+            self.invalid_zone_reasons[zone] = str(reason)
+
+    def _zone_timeout(self, zone: int) -> None:
+        # A zone that never answered is treated as missing; one that used to
+        # answer means the link is in trouble.
+        if zone in self.zones:
+            raise TimeoutError(f"no status for zone {zone}")
+        self._zone_unavailable(zone, "no answer")
 
     # ------------------------------------------------------------------
     # Commands
     # ------------------------------------------------------------------
 
+    def _targets(self, partition: int) -> list[int]:
+        return list(self.user_partitions) if not partition else [partition]
+
     async def arm(self, partition: int, mode: int = ArmMode.AWAY) -> None:
         """Arm a partition (0 = all partitions of the logged user)."""
         await self._request(Cmd.PARTITION_ARM, msg.build_arm(partition, int(mode)))
+        # The panel accepted the command: show the exit delay right away,
+        # the real status follows with the 0812 notification / next poll.
+        self.arming_requested.update(self._targets(partition))
+        self._notify()
         self.request_refresh()
 
     async def disarm(self, partition: int) -> None:
         await self._request(Cmd.PARTITION_DISARM, msg.build_disarm(partition))
+        # Accepted: reflect it immediately (bytes 1-2 reset, keep byte 3)
+        for part in self._targets(partition):
+            old = self.partitions.get(part)
+            if old is not None and old.armed:
+                raw = bytearray(old.raw)
+                raw[0] = 0x02  # disarmed, ready
+                if len(raw) > 1:
+                    raw[1] &= ~0x41 & 0xFF  # clear alarm / siren
+                self.partitions[part] = msg.PartitionStatus(bytes(raw))
+            self.exit_delay.discard(part)
+            self.entry_delay.discard(part)
+        self._notify()
         self.request_refresh()
+
+    async def set_zone_bypass(self, zone: int, bypass: bool) -> None:
+        """Bypass / un-bypass a zone (Single Zone Bypass Write 074A).
+
+        Absoluta applies programming writes only when the user logs out, and
+        the ABS-IP closes the TCP session after the log-out (seen on fw
+        3.60.37). So: write, Exit Access Level (0401), then an immediate,
+        planned reconnection handled by the supervisor (no error, no
+        "unavailable" flicker).
+        """
+        await self._request(
+            Cmd.SINGLE_ZONE_BYPASS_WRITE,
+            b"\x00" + msg.var_bytes(zone) + bytes([0x01 if bypass else 0x00]),
+        )
+        status = self.zones.get(zone)
+        if status is not None:
+            raw = (status.raw | 0x80) if bypass else (status.raw & 0x7F)
+            self.zones[zone] = msg.ZoneStatus(raw)
+        self._notify()
+        self._reconnect_now = True
+        with contextlib.suppress(ITv2Error, TimeoutError):
+            await self._request(Cmd.EXIT_ACCESS_LEVEL, b"\x00", timeout=3)
+        if self._supervisor is None:
+            # Not running under the supervisor (e.g. scripts): reconnect inline
+            await self._close_transport()
+            self._reconnect_now = False
+            await self.connect()
+            return
+        # Wake the poll loop so the supervisor reconnects right away
+        self._closed_event.set()
+        self._refresh_requested.set()
 
     async def set_output(self, output: int, on: bool) -> None:
         await self._request(Cmd.COMMAND_OUTPUT, msg.build_command_output(output, on))

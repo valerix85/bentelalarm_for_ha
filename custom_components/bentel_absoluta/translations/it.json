@@ -32,10 +32,11 @@
       }
     },
     "error": {
-      "cannot_connect": "Impossibile collegarsi alla centrale. Verifica IP/porta, che il protocollo ITv2 sia abilitato sull'ABS-IP e che non ci sia un altro client ITv2 collegato.",
+      "cannot_connect": "Connessione TCP all'ABS-IP non riuscita. Verifica indirizzo IP e porta e che l'host sia raggiungibile da Home Assistant. Dettaglio: {error_detail}",
       "invalid_auth": "La centrale ha rifiutato il PIN.",
       "invalid_pin": "Il PIN deve essere di 1-6 cifre.",
-      "unknown": "Errore imprevisto, controlla il log."
+      "unknown": "Errore imprevisto: {error_detail}",
+      "handshake_failed": "L'ABS-IP ha accettato la connessione TCP ma la sessione ITv2 non è partita. Verifica che ITv2 sia abilitato con cifratura disattivata e che nessun altro client ITv2 (BOSS, app, altro bridge) sia collegato. Dettaglio: {error_detail}"
     },
     "abort": {
       "already_configured": "Questa centrale è già configurata.",
@@ -49,13 +50,18 @@
         "title": "Opzioni",
         "data": {
           "poll_interval": "Intervallo di lettura dello stato",
-          "require_code": "Richiedi il codice per inserire/disinserire da Home Assistant"
+          "require_code": "Richiedi il codice per inserire/disinserire da Home Assistant",
+          "arm_modes": "Modalità di inserimento proposte per ogni area"
         },
         "data_description": {
           "poll_interval": "Lo stato aperto/chiuso delle zone non viene notificato dalla centrale e viene letto a questo intervallo (funziona anche da keep-alive).",
-          "require_code": "Se attivo, le entità di allarme chiedono il PIN utente e i pulsanti delle modalità di inserimento non vengono creati."
+          "require_code": "Se attivo, le entità di allarme chiedono il PIN utente e i pulsanti delle modalità di inserimento non vengono creati.",
+          "arm_modes": "Le aree Absoluta di solito sono solo inserite o disinserite (Fuori casa = inserimento totale). Attiva In casa (parziale) e Notte (parziale istantaneo) solo se le usi sulla centrale."
         }
       }
+    },
+    "error": {
+      "no_arm_mode": "Seleziona almeno una modalità di inserimento."
     }
   },
   "entity": {
@@ -72,15 +78,30 @@
         "name": "Connessione"
       },
       "partition_trouble": {
-        "name": "{partition} guasti"
+        "name": "Area {number} guasti"
       },
       "partition_ready": {
+        "name": "Area {number} pronta"
+      },
+      "partition_trouble_named": {
+        "name": "{partition} guasti"
+      },
+      "partition_ready_named": {
         "name": "{partition} pronta"
+      },
+      "troubles": {
+        "name": "Guasti"
       }
     },
     "switch": {
       "output": {
         "name": "Uscita {number}"
+      },
+      "zone_bypass": {
+        "name": "Esclusione zona {number}"
+      },
+      "zone_bypass_named": {
+        "name": "Esclusione {zone}"
       }
     },
     "button": {
@@ -104,6 +125,15 @@
     },
     "command_failed": {
       "message": "La centrale ha rifiutato il comando: {error}"
+    }
+  },
+  "selector": {
+    "arm_modes": {
+      "options": {
+        "away": "Fuori casa – inserimento totale",
+        "home": "In casa – inserimento parziale (stay)",
+        "night": "Notte – parziale istantaneo (senza ritardo di ingresso)"
+      }
     }
   }
 }

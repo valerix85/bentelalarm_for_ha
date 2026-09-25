@@ -353,19 +353,29 @@ def parse_delay(p: bytes) -> tuple[int | None, int]:
 
 
 def parse_configuration(p: bytes) -> ConfigLabels:
-    """0771: option (var), from (var), to (var), data length (var), data."""
+    """0771: option (var), from (var), to (var), data length (var), data.
+
+    On a real Absoluta (fw 3.60) "data length" is the TOTAL length of the
+    data for the whole range (e.g. 8 labels -> 0x80), as in the usage guide
+    example (partitions 7..9 -> 0x30). Older clients requesting one label at
+    a time never notice. Accept both interpretations.
+    """
     option, off = read_var(p, 0)
     first, off = read_var(p, off)
     last = first
     if first is not None:
         last, off = read_var(p, off)
     dlen, off = read_var(p, off)
-    count = 1 if first is None or last is None else last - first + 1
+    count = 1 if first is None or last is None else max(1, last - first + 1)
+    data = p[off:]
+    size = dlen or 0
+    if count > 1 and size and size % count == 0 and len(data) < size * count:
+        size //= count  # total length: split evenly
     labels = []
-    if dlen:
+    if size:
         for i in range(count):
-            chunk = p[off + i * dlen : off + (i + 1) * dlen]
-            if len(chunk) < dlen:
+            chunk = data[i * size : (i + 1) * size]
+            if len(chunk) < size:
                 break
             labels.append(decode_label(chunk))
     return ConfigLabels(option or 0, first or 0, labels)

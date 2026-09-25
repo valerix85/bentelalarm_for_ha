@@ -19,16 +19,25 @@ from homeassistant.helpers import selector
 from homeassistant.helpers.device_registry import format_mac
 
 from .const import (
+    ARM_MODES_ALL,
+    CONF_ARM_MODES,
     CONF_PIN,
     CONF_POLL_INTERVAL,
     CONF_REQUIRE_CODE,
+    DEFAULT_ARM_MODES,
     DEFAULT_POLL_INTERVAL,
     DEFAULT_PORT,
     DOMAIN,
     MAX_POLL_INTERVAL,
     MIN_POLL_INTERVAL,
 )
-from .itv2.client import AbsolutaClient, AuthenticationFailed, ITv2Error
+from .itv2.client import (
+    AbsolutaClient,
+    AuthenticationFailed,
+    HandshakeFailed,
+    ITv2Error,
+    TcpConnectFailed,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -51,7 +60,7 @@ async def _validate(host: str, port: int, pin: str) -> AbsolutaClient:
     """Open a session, log in and close it. Returns the client (for its info)."""
     client = AbsolutaClient(host, pin, port, load_labels=False)
     try:
-        await client.connect()
+        await client.connect(discover=False)
     finally:
         await client.disconnect()
     return client
@@ -66,7 +75,10 @@ class BentelConfigFlow(ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
+    _error_detail = ""
+
     async def _try(self, host: str, port: int, pin: str, errors: dict) -> AbsolutaClient | None:
+        self._error_detail = ""
         if not _valid_pin(pin):
             errors[CONF_PIN] = "invalid_pin"
             return None
@@ -74,11 +86,21 @@ class BentelConfigFlow(ConfigFlow, domain=DOMAIN):
             return await _validate(host, port, pin)
         except AuthenticationFailed:
             errors["base"] = "invalid_auth"
-        except ITv2Error as err:
-            _LOGGER.debug("Connection test failed: %s", err)
+        except TcpConnectFailed as err:
+            _LOGGER.warning("Bentel Absoluta %s:%s: %s", host, port, err)
+            self._error_detail = str(err)
             errors["base"] = "cannot_connect"
-        except Exception:
+        except HandshakeFailed as err:
+            _LOGGER.warning("Bentel Absoluta %s:%s: %s", host, port, err)
+            self._error_detail = str(err)
+            errors["base"] = "handshake_failed"
+        except ITv2Error as err:
+            _LOGGER.warning("Bentel Absoluta %s:%s: %s", host, port, err)
+            self._error_detail = str(err)
+            errors["base"] = "cannot_connect"
+        except Exception as err:
             _LOGGER.exception("Unexpected error")
+            self._error_detail = repr(err)
             errors["base"] = "unknown"
         return None
 
@@ -101,6 +123,7 @@ class BentelConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=self.add_suggested_values_to_schema(USER_SCHEMA, user_input),
             errors=errors,
+            description_placeholders={"error_detail": self._error_detail},
         )
 
     async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> ConfigFlowResult:
@@ -119,6 +142,7 @@ class BentelConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="reauth_confirm",
             data_schema=vol.Schema({vol.Required(CONF_PIN): PIN_SELECTOR}),
             errors=errors,
+            description_placeholders={"error_detail": self._error_detail},
         )
 
     async def async_step_reconfigure(
@@ -145,6 +169,7 @@ class BentelConfigFlow(ConfigFlow, domain=DOMAIN):
                 USER_SCHEMA, user_input or dict(entry.data)
             ),
             errors=errors,
+            description_placeholders={"error_detail": self._error_detail},
         )
 
     @staticmethod
@@ -157,8 +182,12 @@ class BentelOptionsFlow(OptionsFlow):
     """Polling interval and code requirement."""
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
         if user_input is not None:
-            return self.async_create_entry(data=user_input)
+            if not user_input.get(CONF_ARM_MODES):
+                errors[CONF_ARM_MODES] = "no_arm_mode"
+            else:
+                return self.async_create_entry(data=user_input)
         schema = vol.Schema(
             {
                 vol.Required(
@@ -172,10 +201,19 @@ class BentelOptionsFlow(OptionsFlow):
                         mode=selector.NumberSelectorMode.BOX,
                     )
                 ),
+                vol.Required(CONF_ARM_MODES, default=DEFAULT_ARM_MODES): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=ARM_MODES_ALL,
+                        multiple=True,
+                        mode=selector.SelectSelectorMode.LIST,
+                        translation_key="arm_modes",
+                    )
+                ),
                 vol.Required(CONF_REQUIRE_CODE, default=False): selector.BooleanSelector(),
             }
         )
         return self.async_show_form(
             step_id="init",
             data_schema=self.add_suggested_values_to_schema(schema, self.config_entry.options),
+            errors=errors,
         )

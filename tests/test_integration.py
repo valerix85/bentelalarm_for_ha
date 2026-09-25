@@ -83,35 +83,69 @@ async def test_setup_and_control(hass: HomeAssistant, panel: FakePanel) -> None:
     await hass.async_block_till_done()
 
     states = {s.entity_id: s for s in hass.states.async_all()}
-    area = states["alarm_control_panel.area_01_area_02"]
+    area = states["alarm_control_panel.bentel_absoluta_42_area_02"]
     assert area.state == "disarmed"
-    assert states["binary_sensor.area_01_zona_01"].state == "off"
-    assert states["switch.area_01_uscita_04"].state == "off"
-    assert "button.area_01_uscita_52" in states  # remote command 2 (label offset 50)
-    assert states["binary_sensor.area_01_connection"].state == "on"
-    assert "button.area_01_arm_mode_modo_01" in states
+    assert states["binary_sensor.bentel_absoluta_42_zona_01"].state == "off"
+    assert states["switch.bentel_absoluta_42_uscita_04"].state == "off"
+    assert "button.bentel_absoluta_42_uscita_52" in states  # remote command 2 (label offset 50)
+    assert states["binary_sensor.bentel_absoluta_42_connection"].state == "on"
+    assert "button.bentel_absoluta_42_arm_mode_modo_01" in states
 
     await hass.services.async_call(
         "alarm_control_panel",
         "alarm_arm_away",
-        {"entity_id": "alarm_control_panel.area_01_area_02"},
+        {"entity_id": "alarm_control_panel.bentel_absoluta_42_area_02"},
         blocking=True,
     )
     await asyncio.sleep(0.3)
     await hass.async_block_till_done()
-    assert hass.states.get("alarm_control_panel.area_01_area_02").state == "armed_away"
+    assert hass.states.get("alarm_control_panel.bentel_absoluta_42_area_02").state == "armed_away"
 
     await hass.services.async_call(
-        "switch", "turn_on", {"entity_id": "switch.area_01_uscita_04"}, blocking=True
+        "switch", "turn_on", {"entity_id": "switch.bentel_absoluta_42_uscita_04"}, blocking=True
     )
     await asyncio.sleep(0.2)
-    assert hass.states.get("switch.area_01_uscita_04").state == "on"
+    assert hass.states.get("switch.bentel_absoluta_42_uscita_04").state == "on"
 
     panel.zone_raw[1] = 0x01
     await asyncio.sleep(2.5)
     await hass.async_block_till_done()
-    assert hass.states.get("binary_sensor.area_01_zona_01").state == "on"
+    assert hass.states.get("binary_sensor.bentel_absoluta_42_zona_01").state == "on"
 
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
     assert not panel.errors
+
+
+async def test_arm_modes_option(hass: HomeAssistant, panel: FakePanel) -> None:
+    from homeassistant.components.alarm_control_panel import AlarmControlPanelEntityFeature as F
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="00:03:4f:06:00:03",
+        data={CONF_HOST: "127.0.0.1", CONF_PORT: panel.port, CONF_PIN: "1234"},
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    eid = "alarm_control_panel.bentel_absoluta_42_area_02"
+    # default: only "armed" (away) besides disarm
+    assert hass.states.get(eid).attributes["supported_features"] == F.ARM_AWAY
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"poll_interval": 5, "arm_modes": [], "require_code": False}
+    )
+    assert result["errors"] == {"arm_modes": "no_arm_mode"}
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {"poll_interval": 5, "arm_modes": ["away", "home"], "require_code": False},
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+    await asyncio.sleep(0.5)
+    await hass.async_block_till_done()
+    assert hass.states.get(eid).attributes["supported_features"] == F.ARM_AWAY | F.ARM_HOME
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()

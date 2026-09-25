@@ -217,3 +217,83 @@ async def test_reconnect_after_panel_drop(monkeypatch):
     finally:
         await client.stop()
         await panel.stop()
+
+
+def test_labels_total_length_and_per_label_length():
+    names = [f"Label {i}".ljust(16).encode() for i in range(1, 9)]
+    data = b"".join(names)
+    # real Absoluta: data length = total (8 x 16 = 0x80)
+    total = m.parse_configuration(bytes.fromhex("01 01 01 01 01 08 01 80") + data)
+    # one-at-a-time style: data length = single label
+    single = m.parse_configuration(bytes.fromhex("01 01 01 01 01 08 01 10") + data)
+    assert total.labels == single.labels == [f"Label {i}" for i in range(1, 9)]
+    # guide example: partitions 7..9, 3 labels, total length 0x30
+    three = m.parse_configuration(bytes.fromhex("01 03 01 08 01 0A 01 30") + b"".join(names[:3]))
+    assert three.labels == ["Label 1", "Label 2", "Label 3"]
+
+
+async def test_absoluta16_like_panel():
+    """Real config seen on an Absoluta 16: radio zones 1-18 and 20 (19 disabled),
+    labels returned in blocks, multi-zone answers truncated to 16 zones, and a
+    zone in the mask that the panel refuses."""
+    zones = [*range(1, 19), 20]
+    panel = FakePanel(
+        zones=zones,
+        partitions=range(1, 9),
+        phantom_zones=(25,),
+        max_zones_per_reply=16,
+        zone_label_limit=16,
+    )
+    client = await _started(panel)
+    try:
+        assert client.user_zones == zones
+        assert client.invalid_zones == {25}
+        assert set(client.zones) == set(zones)
+        assert client.zone_labels[16] == "Zona 16"
+        assert 17 not in client.zone_labels  # refused by the panel...
+        assert client.arming_mode_labels["A"] == "Modo 01"  # ...without losing the rest
+        assert client.partition_labels[8] == "Area 09"  # partition 8 -> offset 9
+        panel.zone_raw[18] = 0x01
+        await asyncio.sleep(0.8)  # zones beyond the truncated answer keep updating
+        assert client.zones[18].open
+        assert client.connected
+        assert not panel.errors
+    finally:
+        await client.stop()
+        await panel.stop()
+
+
+async def test_zone_bypass_and_optimistic_disarm():
+    panel = FakePanel()  # closes the session after log-out, like the real ABS-IP
+    client = await _started(panel, load_labels=False)
+    states = []
+    client.add_listener(lambda: states.append(client.connected))
+    try:
+        await client.set_zone_bypass(2, True)  # must not raise
+        assert client.zones[2].bypassed  # optimistic
+        assert panel.zone_raw[2] & 0x80  # applied by the panel at log-out
+        for _ in range(60):
+            await asyncio.sleep(0.05)
+            if panel.connections == 2 and panel.logged_in and client.connected:
+                break
+        assert panel.connections == 2  # planned, immediate reconnection
+        assert False not in states  # never shown as unavailable
+        await asyncio.sleep(0.5)
+        assert client.zones[2].bypassed
+
+        await client.set_zone_bypass(2, False)
+        for _ in range(60):
+            await asyncio.sleep(0.05)
+            if panel.connections == 3 and client.connected and not client.zones[2].bypassed:
+                break
+        assert not client.zones[2].bypassed
+
+        await client.arm(1, ArmMode.AWAY)
+        await asyncio.sleep(0.3)
+        assert client.partitions[1].armed
+        await client.disarm(1)
+        assert not client.partitions[1].armed
+        assert not panel.errors
+    finally:
+        await client.stop()
+        await panel.stop()

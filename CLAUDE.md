@@ -24,3 +24,19 @@ Integrazione Home Assistant per centrali Bentel Absoluta via ABS-IP, protocollo 
   6 memoria, 7 esclusa. Le zone NON sono notificate: vanno lette in polling.
 - Alcune centrali non rispondono a letture multi-zona: il client passa a letture singole.
 - Uscite 1..50, comandi remoti = uscita 56 + n. Etichette via 0800/0771 in Windows-1252.
+- 0771 (verificato su Absoluta 16 fw 3.60.37): il campo "data length" è la lunghezza TOTALE del
+  blocco richiesto (8 etichette -> 0x80), non della singola etichetta. Il parser gestisce entrambi.
+- NON filtrare le zone con "max zones" di 0613: una Absoluta 16 (fw 3.60.37) ha zone radio
+  17, 18, 20 configurate. La maschera 0770 riflette le zone abilitate (la 19 disabilitata non c'è).
+  Le zone che la centrale rifiuta o non riporta vengono scartate dopo averle lette singolarmente;
+  se una risposta multi-zona è troncata, le zone mancanti vengono lette una per una a ogni poll.
+- L'etichetta di sistema (0771 opzione 3, offset 1) è il testo salvaschermo della tastiera:
+  non usarla come nome del dispositivo.
+- Esclusione zona 074A: Absoluta la applica solo al logout (0401), e dopo il logout l'ABS-IP
+  CHIUDE la connessione TCP (verificato fw 3.60.37): si fa una riconnessione immediata "pianificata"
+  senza mostrare le entità come non disponibili.
+- Etichette: la centrale può rifiutare un blocco (es. zone >16 su Absoluta 16); ogni blocco è
+  indipendente e in caso di rifiuto si ritenta elemento per elemento.
+- Stato zone oltre max_zones (0613): su Absoluta 16 fw 3.60.37 una richiesta 0811 per la zona 17
+  (o 18, 20) riceve comunque la risposta con le zone 1..16. Lo stato delle zone >16 NON è
+  disponibile via ITv2 (le etichette sì). Non è un bug del client.

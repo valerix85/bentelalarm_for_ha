@@ -25,7 +25,7 @@ class BentelEntity(Entity):
             identifiers={(DOMAIN, base)},
             manufacturer=MANUFACTURER,
             model=info.model,
-            name=self.client.system_label or info.model,
+            name=f"Bentel {info.model}",
             sw_version=info.firmware,
             configuration_url=None,
         )
