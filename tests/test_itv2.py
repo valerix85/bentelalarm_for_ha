@@ -309,6 +309,7 @@ async def test_event_log_time_sync_and_partition_zones():
     client = await _started(panel, load_labels=True)
     try:
         assert client.partition_zones == {1: [1, 3, 5], 2: [2]}
+        # our own login ("Riconosciuto Cod") is hidden
         assert [e.text() for e in client.last_events] == ["Inser. eseguito"]
         logged = []
         client.add_event_listener(lambda t, d: logged.append((t, d)))
@@ -331,6 +332,27 @@ async def test_event_log_time_sync_and_partition_zones():
         assert client.open_zones(1) == [3]
         assert client.open_zones(0) == [2, 3]
         assert not panel.errors
+    finally:
+        await client.stop()
+        await panel.stop()
+
+
+async def test_bypass_event_not_hidden_by_own_relogin():
+    panel = FakePanel()
+    client = await _started(panel, load_labels=True)
+    logged = []
+    client.add_event_listener(lambda t, d: logged.append(d) if t == "log" else None)
+    try:
+        await client.set_zone_bypass(3, True)
+        for _ in range(60):
+            await asyncio.sleep(0.05)
+            if client.connected and panel.connections == 2 and client.last_events:
+                break
+        await asyncio.sleep(0.3)
+        await client.check_events()
+        assert client.last_events[0].text() == "Esclusa zone"
+        assert client.last_events[0].zone == 3
+        assert [d["text"] for d in logged] == ["Esclusa zone"]  # login not notified
     finally:
         await client.stop()
         await panel.stop()

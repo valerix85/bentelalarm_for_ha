@@ -46,3 +46,6 @@ Integrazione Home Assistant per centrali Bentel Absoluta via ABS-IP, protocollo 
   per gli eventi di zona (ipotesi da Appendice C).
 - Zone per area: 0800 -> 0770 con area != 0 (fw >= 3.50.80). Se non risponde si usa l'elenco globale.
 - Ora centrale: 0741 con data/ora ITv2 in ora locale.
+- Ogni login dell'integrazione (anche la riconnessione dopo un'esclusione) viene registrato dalla
+  centrale come "Riconosciuto Cod" (classe 0, codice 0x15): il client lo riconosce (uno per login,
+  il più recente) e non lo mostra né lo notifica, altrimenti coprirebbe l'evento interessante.

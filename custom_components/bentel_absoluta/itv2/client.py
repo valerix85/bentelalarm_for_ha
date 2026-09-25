@@ -191,6 +191,9 @@ class AbsolutaClient:
         self.last_events: list[ev.PanelEvent] = []
         self._events_supported = True
         self._events_failures = 0
+        self._pending_own_logins = 0
+        self._events_initialized = False
+        self._own_login_keys: set[bytes] = set()
         self._events_due = True
         self._last_events_check = 0.0
         self.invalid_zone_reasons: dict[int, str] = {}
@@ -758,12 +761,15 @@ class AbsolutaClient:
             _LOGGER.warning("Panel did not send its software version")
 
     async def _login(self) -> None:
+        self._pending_own_logins = min(self._pending_own_logins + 1, 3)
+        self._events_due = True
         lead_in = self._expect(Cmd.ACCESS_LEVEL_LEAD_IN_OUT)
         part_assign = self._expect(Cmd.PARTITION_ASSIGNMENT)
         zone_assign = self._expect(Cmd.ZONE_ASSIGNMENT)
         try:
             await self._request(Cmd.ENTER_ACCESS_LEVEL, msg.build_enter_access_level(self._pin))
         except CommandFailed as err:
+            self._pending_own_logins = max(0, self._pending_own_logins - 1)
             if err.code == RESP_INVALID_ACCESS_CODE and not err.is_command_error:
                 raise AuthenticationFailed("invalid user PIN") from err
             raise
@@ -977,9 +983,23 @@ class AbsolutaClient:
         self._events_failures = 0
         if not latest:
             return
-        previous = {e.key for e in self.last_events}
-        new = [e for e in latest if e.key not in previous] if previous else []
-        self.last_events = latest
+        previous = {e.key for e in self.last_events} | self._own_login_keys
+        new = [e for e in latest if e.key not in previous]
+        if self._pending_own_logins:
+            # Each login of this integration is logged by the panel as a "user
+            # entry" (Riconosciuto Cod): hide it, one per login.
+            for event in new:  # newest first: our login is the latest user entry
+                if self._pending_own_logins and ev.is_user_entry(event):
+                    self._own_login_keys.add(event.key)
+                    self._pending_own_logins -= 1
+            new = [e for e in new if e.key not in self._own_login_keys]
+            if len(self._own_login_keys) > 50:
+                self._own_login_keys = {e.key for e in latest} & self._own_login_keys
+        first_read = not self._events_initialized
+        self._events_initialized = True
+        self.last_events = [e for e in latest if e.key not in self._own_login_keys]
+        if first_read:
+            new = []  # do not replay history at start-up
         for event in reversed(new):  # chronological order
             self._event(
                 "log",
@@ -995,7 +1015,7 @@ class AbsolutaClient:
                     "timestamp": event.timestamp.isoformat() if event.timestamp else None,
                 },
             )
-        if new or len(previous) == 0:
+        if new or first_read:
             self._notify()
 
     async def sync_time(self, now: dt.datetime) -> None:

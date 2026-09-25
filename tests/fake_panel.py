@@ -166,6 +166,7 @@ class FakePanel:
                 self._respond(seq, 0x11)
                 return
             self.logged_in = True
+            self.log_event(0x0015, where=0x07, who=0x00)  # "Riconosciuto Cod"
             self._respond(seq)
             self._send(
                 cmd_bytes(Cmd.ACCESS_LEVEL_LEAD_IN_OUT)
@@ -233,6 +234,7 @@ class FakePanel:
         elif cmd == Cmd.EXIT_ACCESS_LEVEL:
             # Absoluta finalises programming writes at log-out
             for zone, on in self.pending_bypass.items():
+                self.log_event(0x4000 if on else 0x4001, who=zone)
                 self.zone_raw[zone] = (
                     (self.zone_raw[zone] | 0x80) if on else (self.zone_raw[zone] & 0x7F)
                 )

@@ -422,3 +422,10 @@ def parse_event_buffer_response(p: bytes) -> tuple[int, list[PanelEvent]]:
         events.append(parse_event(rec))
         off += EVENT_RECORD_SIZE
     return first, events
+
+
+USER_ENTRY = (0, 0x15)  # "Riconosciuto Cod" / "User entry": a user logged in
+
+
+def is_user_entry(event: PanelEvent) -> bool:
+    return (event.cls, event.code) == USER_ENTRY and not event.restore
