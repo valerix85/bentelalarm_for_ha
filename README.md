@@ -135,3 +135,10 @@ Full guide: <https://github.com/anthropics/claude-code-action/blob/main/docs/set
 ## Contributing
 
 Issues and pull requests are welcome: <https://github.com/valerix85/bentelalarm_for_ha>
+
+## Disclaimer and license
+
+This is an independent project, not affiliated with or endorsed by Bentel Security or
+Tyco / Johnson Controls. "Bentel" and "Absoluta" are trademarks of their respective owners.
+
+Released under the [MIT License](LICENSE).
