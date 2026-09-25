@@ -122,8 +122,12 @@ Nelle issue e nelle pull request si può scrivere `@claude` per far intervenire
 1. Crea una GitHub App (*Settings → Developer settings → GitHub Apps*) con permessi di
    repository **Contents**, **Issues**, **Pull requests** in *Read & write*.
 2. Genera una *private key* (`.pem`) e installa la App su questo repository.
-3. In *Settings → Secrets and variables → Actions* aggiungi: `APP_ID`, `APP_PRIVATE_KEY`
-   (contenuto del `.pem`) e `ANTHROPIC_API_KEY`.
+3. Crea una chiave API su <https://console.anthropic.com> (serve credito prepagato).
+4. In *Settings → Secrets and variables → Actions* aggiungi: `APP_ID`, `APP_PRIVATE_KEY`
+   (contenuto del `.pem`) e `ANTHROPIC_API_KEY` (la chiave del punto 3).
+   In alternativa alla chiave API puoi usare il token di un abbonamento Claude Pro/Max
+   (`claude setup-token` → secret `CLAUDE_CODE_OAUTH_TOKEN` e, nel workflow,
+   `claude_code_oauth_token:` al posto di `anthropic_api_key:`).
 
 Guida completa: <https://github.com/anthropics/claude-code-action/blob/main/docs/setup.md>
 </details>

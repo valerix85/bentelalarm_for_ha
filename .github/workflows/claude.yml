@@ -4,6 +4,7 @@ name: Claude with Custom App
 # in una review o nel titolo/corpo di una nuova issue.
 # Setup: https://github.com/anthropics/claude-code-action/blob/main/docs/setup.md
 # Secret richiesti: APP_ID, APP_PRIVATE_KEY, ANTHROPIC_API_KEY
+# (chiave API da https://console.anthropic.com, con credito disponibile)
 
 on:
   issue_comment:
@@ -47,5 +48,8 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ steps.app-token.outputs.token }}
+          # Sonnet: costa meno e non richiede il contesto da 1M token
+          # (che con una chiave API di tier basso viene rifiutato)
           claude_args: |
+            --model claude-sonnet-5
             --max-turns 30
