@@ -5,145 +5,164 @@
 [![Validate](https://github.com/valerix85/bentelalarm_for_ha/actions/workflows/validate.yml/badge.svg)](https://github.com/valerix85/bentelalarm_for_ha/actions/workflows/validate.yml)
 [![License](https://img.shields.io/github/license/valerix85/bentelalarm_for_ha)](LICENSE)
 
-Custom Home Assistant integration that connects **locally** to a **Bentel Absoluta** alarm panel
-through the **ABS-IP** module, using the **ITv2** protocol over TCP
-(no cloud, no MQTT bridge).
-
-> Requires the ITv2 protocol to be enabled on the ABS-IP (default TCP port **3064**,
-> encryption disabled) and the PIN of a Master, Normal or Limited user.
+Control your **Bentel Absoluta** alarm panel from Home Assistant. The integration talks
+directly to the panel's **ABS-IP** module on your network, using Bentel's **ITv2** protocol:
+fully local, no cloud account, no MQTT bridge, no extra hardware.
 
 ## Features
 
-| Platform | What it provides |
-|---|---|
-| `alarm_control_panel` | **All partitions**: arms/disarms every partition of the user with a single command (combined state; when only some partitions are armed the state is "armed custom bypass" with `armed_partitions`/`disarmed_partitions` attributes). Plus one entity per **partition** assigned to the user: by default only **away** arming and disarm; optionally also Home (*stay*) and Night (*instant stay*). States `arming` (exit delay), `pending` (entry delay), `triggered`. |
-| `binary_sensor` | One per **zone** (open/closed, with alarm, memory, tamper, fault, low battery and bypassed attributes); panel-wide **troubles**; per-partition *troubles* and *ready* (disabled by default); **connection** status. |
-| `sensor` | **Last event** from the panel event log (e.g. "Arming OK", "Zone alarm – Kitchen window"), with timestamp and the last 5 events as attributes. Each new event is also fired as `bentel_absoluta_event` with `type: log`. |
-| `switch` | The **programmable outputs** enabled for the user and **bypass** of each zone. The panel applies a bypass at log-out, so the integration logs out and back in automatically (a few seconds). |
-| `button` | **Remote commands**, **arming modes A-D** (global), *clear alarm memory*, *clear alarms/troubles/tampers*, *sync clock* (sets Home Assistant's time on the panel). |
-| Events | `bentel_absoluta_event` with `type`: `arming`, `blocking_condition` (e.g. mains failure preventing arming), `trouble`, `arming_pre_alert`, `log`. |
-| Diagnostics | Download from the device page (PIN redacted). |
+- **Arm and disarm** each partition, or all of them at once with the *All partitions* panel
+- **Zone sensors**: open/closed, with alarm, tamper, fault, low battery and bypass details
+- **Zone bypass** switches
+- **Programmable outputs**, **remote commands** and **arming modes A–D**
+- **Troubles** sensor and **Last event** sensor from the panel event log
+- Buttons to **sync the panel clock** and **clear alarm memory** or alarms/faults/tampers
+- **Events** for automations (arming, troubles, event log…)
+- Partition, zone, output and arming mode **names are read from the panel**
+- English and Italian UI, diagnostics download (PIN redacted)
 
-Partition, zone, output and arming mode names are read from the panel.
-The UI is translated into English and Italian; event texts follow Home Assistant's language.
+## Requirements
+
+- An Absoluta panel with the **ABS-IP** module on your network
+- The **ITv2** protocol enabled on the ABS-IP with **encryption disabled**; the TCP port is
+  **3064** by default (these are installer settings, see the Absoluta installer manual or ask
+  your installer)
+- The **PIN** of a Master, Normal or Limited user: the integration sees only the partitions,
+  zones and outputs assigned to that user
+
+### Tested hardware
+
+| Panel | Firmware | Status |
+|---|---|---|
+| Absoluta 16 + ABS-IP | 3.60.37 | ✅ Working |
+
+Other models (Absoluta 42, 104) and firmware versions should work but have not been tested
+yet: feedback is very welcome, please [open an issue](https://github.com/valerix85/bentelalarm_for_ha/issues/new/choose).
 
 ## Installation
 
-**HACS** (recommended): *HACS → ⋮ → Custom repositories* →
-`https://github.com/valerix85/bentelalarm_for_ha`, category *Integration*, then install
-*Bentel Absoluta* and restart Home Assistant.
+### HACS (recommended)
 
-**Manual**: copy `custom_components/bentel_absoluta/` into `<config>/custom_components/`
-and restart.
+[![Open your Home Assistant instance and open this repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=valerix85&repository=bentelalarm_for_ha&category=integration)
 
-Then *Settings → Devices & services → Add integration → Bentel Absoluta* and enter the
-ABS-IP address, port and user PIN.
+Or manually: *HACS → ⋮ → Custom repositories* → add
+`https://github.com/valerix85/bentelalarm_for_ha` with category *Integration*.
+Then download **Bentel Absoluta** and **restart Home Assistant**.
+
+### Manual
+
+Copy `custom_components/bentel_absoluta/` into the `custom_components/` folder of your
+Home Assistant configuration and restart Home Assistant.
+
+> After every update, **restart** Home Assistant: reloading the integration is not enough.
+
+## Configuration
+
+[![Open your Home Assistant instance and start setting up the integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=bentel_absoluta)
+
+Or go to *Settings → Devices & services → Add integration → Bentel Absoluta* and enter the
+ABS-IP address, the port and the user PIN.
 
 ### Options
 
-- **Status polling interval** (default 5 s): the ABS-IP does *not* notify zone open/close
-  changes, so zones are polled. The same polling acts as the keep-alive recommended by the
-  Bentel guide.
-- **Arming modes offered** (default: *Away* only): add *Home* (stay) and *Night* (instant stay)
-  only if you use them on the panel, and *Forced* (away arming even with open zones, which are
-  bypassed; shown in Home Assistant as "custom bypass") only if you really need it.
-- **Require code**: when enabled, the alarm entities ask for the PIN to arm/disarm, and the
-  arming mode A-D buttons and zone bypass switches are not created.
+Available from the integration's **Configure** button:
+
+| Option | Default | Description |
+|---|---|---|
+| Status polling interval | 5 s | The ABS-IP does not push zone open/closed changes, so zones are read at this interval. |
+| Arm modes | Away | Add *Home* (stay) and *Night* (instant stay) only if you use them on the panel. *Forced* arms even with open zones, which get bypassed; it appears in Home Assistant as "custom bypass". |
+| Require code | Off | Home Assistant asks for the PIN to arm/disarm. Arming mode buttons and zone bypass switches are not created. |
+
+## Entities
+
+| Entity | Notes |
+|---|---|
+| **All partitions** (alarm panel) | Arms/disarms every partition at once. When only some partitions are armed the state is *armed custom bypass* and the `armed_partitions` / `disarmed_partitions` attributes tell which. |
+| **Partition** (alarm panel) | One per partition. States include *arming* (exit delay), *pending* (entry delay) and *triggered*. |
+| **Zone** (binary sensor) | One per zone, on = open. Attributes: alarm, alarm memory, tamper, fault, low battery, bypassed. |
+| **Troubles** (binary sensor) | On when the panel reports a trouble (mains, battery, faults…). |
+| **Connection** (binary sensor) | State of the ITv2 session. |
+| **Last event** (sensor) | Latest entry of the panel event log, e.g. *Zone alarm – Kitchen window*; the last events are in the `recent` attribute. |
+| **Output** / **Zone bypass** (switch) | Programmable outputs enabled for the user; bypass of each zone (takes a few seconds, see below). |
+| **Remote command**, **Arm mode A–D**, **Clear alarm memory**, **Clear alarms, faults and tampers**, **Sync panel clock** (button) | |
+
+Per-partition *troubles* and *ready* sensors are also available, disabled by default.
+
+### Events
+
+The integration fires `bentel_absoluta_event` with a `type` field: `log` (every new entry of
+the panel event log), `arming`, `blocking_condition` (e.g. mains failure preventing arming),
+`trouble` and `arming_pre_alert`. Example: get notified of any zone alarm.
+
+```yaml
+automation:
+  - alias: "Alarm: zone alarm notification"
+    triggers:
+      - trigger: event
+        event_type: bentel_absoluta_event
+        event_data:
+          type: log
+          class: 1        # alarm events
+          restore: false
+    actions:
+      - action: notify.notify
+        data:
+          message: "{{ trigger.event.data.text_en }} {{ trigger.event.data.zone_label or '' }}"
+```
+
+`log` events carry `text` (Italian), `text_en`, `event_id`, `class`
+(0 generic, 1 alarm, 2 tamper, 3 fault, 4 bypass, 5 test), `restore`, `zone`, `zone_label`,
+`partitions` and `timestamp`.
 
 ## Good to know
 
-- The ABS-IP accepts **a single ITv2 connection** at a time.
-- The ITv2 session has the **lowest priority**: when BOSS or the mobile app connects, the panel
-  closes it. The integration reconnects by itself (back-off from 10 s to 5 min).
-- Only the partitions/zones/outputs assigned to the configured user are exposed.
-- ABS-IP AES encryption is not supported: keep it disabled for the ITv2 client.
+- The ABS-IP accepts **only one ITv2 connection** at a time.
+- ITv2 has the **lowest priority**: when BOSS or the Bentel mobile app connects, the panel
+  closes the Home Assistant session. The integration reconnects by itself (retrying from 10 s
+  up to every 5 min).
+- **Zone bypass** is applied by the panel when the session ends, so the integration
+  reconnects right after it: each bypass takes a few seconds.
+- **Arming refused**: if a zone is open or something blocks arming, Home Assistant shows an
+  error with the open zones and the state does not change. With *All partitions*, some
+  partitions may arm and others not.
 
 ## Known limitations
 
-- **Zone status beyond the model limit**: over ITv2 the panel reports a maximum number of zones
-  (e.g. 16 on an Absoluta 16). Even if more zones are configured in BOSS (e.g. wireless 17-20),
-  the ABS-IP only returns the status of the first N: the others are not created (the reason is
-  shown in the diagnostics, `invalid_zone_reasons`). Workaround: use slots within the limit for
+- **Zones above the model limit**: the panel reports a maximum number of zones over ITv2
+  (16 on an Absoluta 16). Zones configured above it (e.g. wireless zones 17–20) are not
+  created because the ABS-IP does not return their status. Use slots within the limit for
   important sensors.
-- **Outputs**: only outputs *reserved* to the partition with a programmed action are exposed
-  (the panel decides which ones are available to ITv2).
-- **Zone bypass**: the panel applies it at log-out and then closes the session; the integration
-  reconnects automatically, so each bypass takes a few seconds.
-- **Arming refused**: if a zone is open (or a blocking condition is present) the panel refuses
-  to arm; Home Assistant shows the error with the list of open zones (of that partition, when
-  the panel provides the zone-partition assignment) and the state is unchanged. With the
-  *All partitions* entity some partitions may arm and others not: the state becomes partial
-  and the attributes tell which.
+- **Outputs**: only outputs reserved to the user's partitions with a programmed action are
+  available over ITv2.
+- ABS-IP **AES encryption** is not supported.
 
-## Debugging
+## Troubleshooting
 
-```yaml
-logger:
-  default: warning
-  logs:
-    custom_components.bentel_absoluta: debug
-```
-
-With debug logging every transmitted/received packet (`TX`/`RX`) is logged in hex:
-attach it to issues together with the diagnostics file.
-
-## Development
-
-```
-custom_components/bentel_absoluta/
-├── itv2/            # protocol library, no Home Assistant dependencies
-│   ├── framing.py   # 0x7E/0x7F, 7D 00/01/02 escaping, length, CRC-16/CCITT-FALSE
-│   ├── messages.py  # encoding/decoding of the commands used by Absoluta
-│   ├── events.py    # event log decoding (Appendix B texts)
-│   └── client.py    # asyncio session: sequences/ACKs, handshake, login, polling, commands
-├── alarm_control_panel.py, binary_sensor.py, sensor.py, switch.py, button.py
-└── config_flow.py   # setup, reauth, reconfigure, options
-tests/
-├── fake_panel.py    # Absoluta panel simulator (ITv2 TCP server)
-├── test_itv2.py     # protocol tests
-└── test_integration.py  # tests inside a real Home Assistant
-scripts/diagnose.py  # standalone connection test against a real panel
-```
-
-```bash
-pip install pytest-homeassistant-custom-component
-pytest
-```
-
-References: *Interactive Protocol V2.00 R2.03* and *ITv2 Usage Guide for Absoluta Rev 1.05*
-(Tyco / Bentel Security). Message formats and the session sequence were also cross-checked
-against the open-source Java bridge
-[mostorer/bentel-absoluta-local](https://github.com/mostorer/bentel-absoluta-local).
-
-### Claude Code
-
-In issues and pull requests you can write `@claude` to get help from
-[Claude Code](https://github.com/anthropics/claude-code-action) (workflow
-`.github/workflows/claude.yml`).
-
-<details>
-<summary>Setting up the Claude workflow with a custom GitHub App</summary>
-
-1. Create a GitHub App (*Settings → Developer settings → GitHub Apps*) with repository
-   permissions **Contents**, **Issues**, **Pull requests** set to *Read & write*.
-2. Generate a *private key* (`.pem`) and install the App on this repository.
-3. Create an API key at <https://console.anthropic.com> (prepaid credit required).
-4. In *Settings → Secrets and variables → Actions* add `APP_ID`, `APP_PRIVATE_KEY`
-   (contents of the `.pem`) and `ANTHROPIC_API_KEY` (the key from step 3).
-   Instead of an API key you can use a Claude Pro/Max subscription token
-   (`claude setup-token` → secret `CLAUDE_CODE_OAUTH_TOKEN` and, in the workflow,
-   `claude_code_oauth_token:` instead of `anthropic_api_key:`).
-
-Full guide: <https://github.com/anthropics/claude-code-action/blob/main/docs/setup.md>
-</details>
+1. Check the **Connection** sensor and that BOSS or the mobile app are not connected.
+2. Download the **diagnostics**: device page → ⋮ → *Download diagnostics* (the PIN is redacted).
+3. For a detailed log: *Settings → Devices & services → Bentel Absoluta → ⋮ → Enable debug
+   logging*, reproduce the problem, then disable it to download the log (every packet is
+   logged in hex).
+4. [Open an issue](https://github.com/valerix85/bentelalarm_for_ha/issues/new/choose)
+   attaching both files.
 
 ## Contributing
 
-Issues and pull requests are welcome: <https://github.com/valerix85/bentelalarm_for_ha>
+Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the code
+structure, tests and protocol notes.
+
+## Credits
+
+Built on Bentel's *ITv2 Usage Guide for Absoluta* and *Interactive Protocol V2.00*
+documentation; the session sequence was cross-checked against the open-source Java bridge
+[mostorer/bentel-absoluta-local](https://github.com/mostorer/bentel-absoluta-local).
+Developed with the help of [Claude Code](https://claude.com/claude-code) and tested on a
+real panel.
 
 ## Disclaimer and license
 
 This is an independent project, not affiliated with or endorsed by Bentel Security or
 Tyco / Johnson Controls. "Bentel" and "Absoluta" are trademarks of their respective owners.
+Use it at your own risk: it is not a certified security product.
 
 Released under the [MIT License](LICENSE).

@@ -55,7 +55,7 @@
         },
         "data_description": {
           "poll_interval": "Zone open/closed state is not pushed by the panel and is polled at this interval (it also works as keep-alive).",
-          "require_code": "When enabled the alarm panel entities ask for the user PIN and the arming-mode buttons are not created.",
+          "require_code": "When enabled the alarm panel entities ask for the user PIN, and the arming-mode buttons and zone bypass switches are not created.",
           "arm_modes": "Absoluta partitions are normally just armed or disarmed (Away). Enable Home (stay) and Night (instant stay) only if you use them on the panel."
         }
       }
