@@ -1,0 +1,67 @@
+name: Bug report
+description: Something does not work with your Bentel Absoluta panel
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! The integration has been tested on a limited number of panels,
+        so details about your installation are essential.
+        **Never post your PIN**: the diagnostics file already redacts it.
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: What you did, what you expected and what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: panel
+    attributes:
+      label: Panel model and firmware
+      description: Shown on the device page in Home Assistant (e.g. Absoluta 16, firmware 3.60.37).
+      placeholder: Absoluta 16, 3.60.37
+    validations:
+      required: true
+  - type: input
+    id: integration_version
+    attributes:
+      label: Integration version
+      description: HACS → Bentel Absoluta, or `version` in manifest.json.
+      placeholder: 0.3.4
+    validations:
+      required: true
+  - type: input
+    id: ha_version
+    attributes:
+      label: Home Assistant version
+      description: Settings → About.
+      placeholder: 2026.9.3
+    validations:
+      required: true
+  - type: dropdown
+    id: user_type
+    attributes:
+      label: Type of user whose PIN is configured
+      options:
+        - Master
+        - Normal
+        - Limited
+        - Not sure
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: |
+        Device page → ⋮ → Download diagnostics, then drag the file here.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Debug log
+      description: |
+        Optional but very useful: enable debug logging for the integration
+        (Settings → Devices & services → Bentel Absoluta → ⋮ → Enable debug logging),
+        reproduce the problem, disable it and attach the downloaded log.
+      render: text

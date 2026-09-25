@@ -1,5 +1,10 @@
 # Bentel Absoluta for Home Assistant
 
+[![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
+[![Release](https://img.shields.io/github/v/release/valerix85/bentelalarm_for_ha)](https://github.com/valerix85/bentelalarm_for_ha/releases)
+[![Validate](https://github.com/valerix85/bentelalarm_for_ha/actions/workflows/validate.yml/badge.svg)](https://github.com/valerix85/bentelalarm_for_ha/actions/workflows/validate.yml)
+[![License](https://img.shields.io/github/license/valerix85/bentelalarm_for_ha)](LICENSE)
+
 Custom Home Assistant integration that connects **locally** to a **Bentel Absoluta** alarm panel
 through the **ABS-IP** module, using the **ITv2** protocol over TCP
 (no cloud, no MQTT bridge).
