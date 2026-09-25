@@ -1,4 +1,8 @@
-"""Alarm control panel entities: one per partition assigned to the user."""
+"""Alarm control panel entities.
+
+One entity per partition assigned to the user, plus a "Global" entity that
+arms/disarms all of them at once (Absoluta partition 0 in 0900/0901).
+"""
 
 from __future__ import annotations
 
@@ -24,8 +28,8 @@ from .const import (
     DOMAIN,
 )
 from .entity import BentelEntity
-from .itv2.client import ITv2Error
-from .itv2.const import ArmMode
+from .itv2.client import CommandFailed, ITv2Error
+from .itv2.const import ArmMode, Cmd
 
 
 async def async_setup_entry(
@@ -34,7 +38,37 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     client = entry.runtime_data
-    async_add_entities(BentelPartition(entry, p) for p in client.user_partitions)
+    entities: list[BentelPartition] = [BentelPartition(entry, p) for p in client.user_partitions]
+    if len(client.user_partitions) > 1:
+        entities.insert(0, BentelGlobal(entry))
+    async_add_entities(entities)
+
+
+def partition_state(client, partition: int) -> AlarmControlPanelState | None:
+    """HA state of one Absoluta partition."""
+    status = client.partitions.get(partition)
+    if status is None:
+        return None
+    if status.alarm or status.siren:
+        return AlarmControlPanelState.TRIGGERED
+    if partition in client.entry_delay or status.entry_delay:
+        return AlarmControlPanelState.PENDING
+    if not status.armed:
+        if partition in client.arming_requested:
+            return AlarmControlPanelState.ARMING
+        return AlarmControlPanelState.DISARMED
+    if partition in client.exit_delay or status.exit_delay:
+        return AlarmControlPanelState.ARMING
+    if status.away:
+        return AlarmControlPanelState.ARMED_AWAY
+    if status.stay and (status.no_entry_delay or status.night):
+        return AlarmControlPanelState.ARMED_NIGHT
+    if status.stay:
+        return AlarmControlPanelState.ARMED_HOME
+    if status.night:
+        return AlarmControlPanelState.ARMED_NIGHT
+    # Customised arming modes can arm a partition without a stay/away flag
+    return AlarmControlPanelState.ARMED_CUSTOM_BYPASS
 
 
 class BentelPartition(BentelEntity, AlarmControlPanelEntity):
@@ -65,29 +99,7 @@ class BentelPartition(BentelEntity, AlarmControlPanelEntity):
 
     @property
     def alarm_state(self) -> AlarmControlPanelState | None:
-        status = self.client.partitions.get(self.partition)
-        if status is None:
-            return None
-        if status.alarm or status.siren:
-            return AlarmControlPanelState.TRIGGERED
-        if self.partition in self.client.entry_delay or status.entry_delay:
-            return AlarmControlPanelState.PENDING
-        if not status.armed:
-            if self.partition in self.client.arming_requested:
-                return AlarmControlPanelState.ARMING
-            return AlarmControlPanelState.DISARMED
-        if self.partition in self.client.exit_delay or status.exit_delay:
-            return AlarmControlPanelState.ARMING
-        if status.away:
-            return AlarmControlPanelState.ARMED_AWAY
-        if status.stay and (status.no_entry_delay or status.night):
-            return AlarmControlPanelState.ARMED_NIGHT
-        if status.stay:
-            return AlarmControlPanelState.ARMED_HOME
-        if status.night:
-            return AlarmControlPanelState.ARMED_NIGHT
-        # Customised arming modes can arm a partition without a stay/away flag
-        return AlarmControlPanelState.ARMED_CUSTOM_BYPASS
+        return partition_state(self.client, self.partition)
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -111,6 +123,33 @@ class BentelPartition(BentelEntity, AlarmControlPanelEntity):
     async def _run(self, coro) -> None:
         try:
             await coro
+        except CommandFailed as err:
+            if (
+                err.command == Cmd.PARTITION_ARM
+                and not err.is_command_error
+                and err.code
+                in (
+                    0x01,
+                    0x04,
+                )
+            ):
+                # Refused: typically a zone left open or a blocking condition
+                # (mains/battery/tamper fault, notified separately by 0841).
+                open_zones = [
+                    self.client.zone_labels.get(z, str(z))
+                    for z, st in sorted(self.client.zones.items())
+                    if st.open and not st.bypassed
+                ]
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="arm_failed_open_zones" if open_zones else "arm_failed",
+                    translation_placeholders={"zones": ", ".join(open_zones)},
+                ) from err
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="command_failed",
+                translation_placeholders={"error": str(err)},
+            ) from err
         except ITv2Error as err:
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
@@ -133,3 +172,58 @@ class BentelPartition(BentelEntity, AlarmControlPanelEntity):
     async def async_alarm_arm_night(self, code: str | None = None) -> None:
         self._check_code(code)
         await self._run(self.client.arm(self.partition, ArmMode.INSTANT_STAY))
+
+
+_ARMED = {
+    AlarmControlPanelState.ARMED_AWAY,
+    AlarmControlPanelState.ARMED_HOME,
+    AlarmControlPanelState.ARMED_NIGHT,
+    AlarmControlPanelState.ARMED_CUSTOM_BYPASS,
+}
+
+
+class BentelGlobal(BentelPartition):
+    """All partitions of the logged user at once (Absoluta partition 0)."""
+
+    def __init__(self, entry: BentelConfigEntry) -> None:
+        super().__init__(entry, 0)
+        self._attr_unique_id = f"{entry.unique_id or entry.entry_id}_global"
+        self._attr_translation_key = "global"
+        self._attr_translation_placeholders = {}
+
+    def _states(self) -> dict[int, AlarmControlPanelState | None]:
+        return {p: partition_state(self.client, p) for p in self.client.user_partitions}
+
+    @property
+    def alarm_state(self) -> AlarmControlPanelState | None:
+        states = [s for s in self._states().values() if s is not None]
+        if not states:
+            return None
+        for priority in (
+            AlarmControlPanelState.TRIGGERED,
+            AlarmControlPanelState.PENDING,
+            AlarmControlPanelState.ARMING,
+        ):
+            if priority in states:
+                return priority
+        armed = [s for s in states if s in _ARMED]
+        if not armed:
+            return AlarmControlPanelState.DISARMED
+        if len(armed) == len(states) and len(set(armed)) == 1:
+            return armed[0]  # every partition armed the same way
+        # Partially armed (or mixed modes): HA has no "partial" state
+        return AlarmControlPanelState.ARMED_CUSTOM_BYPASS
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        states = self._states()
+        name = self.client.partition_labels.get
+        return {
+            "armed_partitions": [name(p, str(p)) for p, s in states.items() if s in _ARMED],
+            "disarmed_partitions": [
+                name(p, str(p)) for p, s in states.items() if s == AlarmControlPanelState.DISARMED
+            ],
+            "partially_armed": any(s in _ARMED for s in states.values())
+            and not all(s in _ARMED for s in states.values()),
+            "ready": all(st.ready for st in self.client.partitions.values() if not st.armed),
+        }

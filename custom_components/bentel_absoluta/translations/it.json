@@ -68,6 +68,9 @@
     "alarm_control_panel": {
       "partition": {
         "name": "Area {number}"
+      },
+      "global": {
+        "name": "Globale"
       }
     },
     "binary_sensor": {
@@ -125,6 +128,12 @@
     },
     "command_failed": {
       "message": "La centrale ha rifiutato il comando: {error}"
+    },
+    "arm_failed_open_zones": {
+      "message": "Inserimento rifiutato dalla centrale: zone aperte: {zones}. Chiudile o escludile e riprova."
+    },
+    "arm_failed": {
+      "message": "Inserimento rifiutato dalla centrale (condizione di blocco, es. mancanza rete, batteria o sabotaggio). Controlla i guasti della centrale."
     }
   },
   "selector": {

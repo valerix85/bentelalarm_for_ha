@@ -149,3 +149,77 @@ async def test_arm_modes_option(hass: HomeAssistant, panel: FakePanel) -> None:
 
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
+
+
+async def test_global_panel(hass: HomeAssistant, panel: FakePanel) -> None:
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="00:03:4f:06:00:03",
+        data={CONF_HOST: "127.0.0.1", CONF_PORT: panel.port, CONF_PIN: "1234"},
+        options={"poll_interval": 2},
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    glob = "alarm_control_panel.bentel_absoluta_42_all_partitions"
+    area2 = "alarm_control_panel.bentel_absoluta_42_area_02"
+    assert hass.states.get(glob).state == "disarmed"
+
+    # one command arms every partition (partition 0)
+    await hass.services.async_call(
+        "alarm_control_panel", "alarm_arm_away", {"entity_id": glob}, blocking=True
+    )
+    await asyncio.sleep(0.4)
+    await hass.async_block_till_done()
+    assert all(panel.part_raw[p][0] & 0x01 for p in panel.partitions)
+    assert hass.states.get(glob).state == "armed_away"
+
+    # disarm a single partition -> global shows partially armed
+    await hass.services.async_call(
+        "alarm_control_panel", "alarm_disarm", {"entity_id": area2}, blocking=True
+    )
+    await asyncio.sleep(0.4)
+    await hass.async_block_till_done()
+    state = hass.states.get(glob)
+    assert state.state == "armed_custom_bypass"
+    assert state.attributes["partially_armed"] is True
+    assert state.attributes["disarmed_partitions"] == ["Area 02"]
+
+    await hass.services.async_call(
+        "alarm_control_panel", "alarm_disarm", {"entity_id": glob}, blocking=True
+    )
+    await asyncio.sleep(0.4)
+    await hass.async_block_till_done()
+    assert hass.states.get(glob).state == "disarmed"
+    assert not any(panel.part_raw[p][0] & 0x01 for p in panel.partitions)
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+
+async def test_arm_refused_open_zone(hass: HomeAssistant, panel: FakePanel) -> None:
+    from homeassistant.exceptions import HomeAssistantError
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="00:03:4f:06:00:03",
+        data={CONF_HOST: "127.0.0.1", CONF_PORT: panel.port, CONF_PIN: "1234"},
+        options={"poll_interval": 2},
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    panel.zone_raw[3] = 0x01  # a window left open
+    await asyncio.sleep(2.5)
+    with pytest.raises(HomeAssistantError) as exc:
+        await hass.services.async_call(
+            "alarm_control_panel",
+            "alarm_arm_away",
+            {"entity_id": "alarm_control_panel.bentel_absoluta_42_all_partitions"},
+            blocking=True,
+        )
+    assert exc.value.translation_key == "arm_failed_open_zones"
+    assert exc.value.translation_placeholders == {"zones": "Zona 03"}
+    assert hass.states.get("alarm_control_panel.bentel_absoluta_42_area_02").state == "disarmed"
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()

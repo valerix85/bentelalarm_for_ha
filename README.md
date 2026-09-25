@@ -11,7 +11,7 @@ Integrazione personalizzata per Home Assistant che si collega **localmente** all
 
 | Piattaforma | Cosa espone |
 |---|---|
-| `alarm_control_panel` | Un'entità per ogni **area** assegnata all'utente: di default solo **inserimento totale** ("Fuori casa") e disinserimento; opzionalmente anche Parziale ("In casa" = *stay*) e Notte (= *stay istantaneo*). Stati `arming` (tempo di uscita), `pending` (tempo di ingresso), `triggered`. |
+| `alarm_control_panel` | **Globale**: inserisce/disinserisce tutte le aree dell'utente con un solo comando (stato combinato; se solo alcune aree sono inserite: "Attivo con bypass personalizzato" + attributi `armed_partitions`/`disarmed_partitions`). Poi un'entità per ogni **area** assegnata all'utente: di default solo **inserimento totale** ("Fuori casa") e disinserimento; opzionalmente anche Parziale ("In casa" = *stay*) e Notte (= *stay istantaneo*). Stati `arming` (tempo di uscita), `pending` (tempo di ingresso), `triggered`. |
 | `binary_sensor` | Una per ogni **zona** (aperta/chiusa, con attributi allarme, memoria, sabotaggio, guasto, batteria bassa, esclusa); per ogni area *guasti* e *pronta*; stato della **connessione**. |
 | `switch` | Le **uscite programmabili** abilitate per l'utente e l'**esclusione** di ogni zona ("Esclusione Divano"…). L'esclusione viene applicata dalla centrale al logout, quindi l'integrazione fa logout e nuovo login in automatico (qualche secondo). Non creati se è attiva l'opzione *Richiedi il codice*. |
 | `button` | I **comandi remoti**, le **modalità di inserimento A-D** (globali), *cancella memoria allarmi*, *cancella allarmi/guasti/sabotaggi*. |
@@ -62,6 +62,10 @@ IP dell'ABS-IP, porta e PIN utente.
   (è la centrale a decidere quali rendere disponibili a ITv2).
 - **Esclusione zone**: la centrale la applica al logout e poi chiude la sessione; l'integrazione
   si ricollega da sola, per cui ogni esclusione richiede qualche secondo.
+- **Inserimento rifiutato**: se una zona è aperta (o c'è una condizione di blocco) la centrale
+  rifiuta l'inserimento; Home Assistant mostra l'errore con l'elenco delle zone aperte e lo
+  stato resta invariato. Con l'entità *Globale* alcune aree potrebbero inserirsi e altre no:
+  lo stato diventa parziale e gli attributi indicano quali.
 - **Una sola connessione ITv2** e priorità più bassa di BOSS/app (vedi sopra).
 
 ## Debug

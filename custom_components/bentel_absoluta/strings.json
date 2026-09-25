@@ -68,6 +68,9 @@
     "alarm_control_panel": {
       "partition": {
         "name": "Partition {number}"
+      },
+      "global": {
+        "name": "All partitions"
       }
     },
     "binary_sensor": {
@@ -125,6 +128,12 @@
     },
     "command_failed": {
       "message": "The panel refused the command: {error}"
+    },
+    "arm_failed_open_zones": {
+      "message": "Arming refused by the panel: open zones: {zones}. Close them or bypass them and try again."
+    },
+    "arm_failed": {
+      "message": "Arming refused by the panel (blocking condition such as a mains, battery or tamper fault). Check the panel troubles."
     }
   },
   "selector": {
