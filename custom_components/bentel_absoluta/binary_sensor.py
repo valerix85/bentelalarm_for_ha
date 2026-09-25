@@ -20,7 +20,7 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     client = entry.runtime_data
-    entities: list[BinarySensorEntity] = [BentelConnection(entry)]
+    entities: list[BinarySensorEntity] = [BentelConnection(entry), BentelTroubles(entry)]
     entities += [BentelZone(entry, z) for z in client.user_zones]
     for part in client.user_partitions:
         entities.append(BentelPartitionFlag(entry, part, "trouble"))
@@ -70,14 +70,19 @@ class BentelPartitionFlag(BentelEntity, BinarySensorEntity):
         super().__init__(entry, f"partition_{partition}_{kind}")
         self.partition = partition
         self.kind = kind
-        self._attr_translation_key = f"partition_{kind}"
-        self._attr_translation_placeholders = {
-            "partition": self.client.partition_labels.get(partition, str(partition))
-        }
+        label = self.client.partition_labels.get(partition)
+        if label:
+            self._attr_translation_key = f"partition_{kind}_named"
+            self._attr_translation_placeholders = {"partition": label}
+        else:
+            self._attr_translation_key = f"partition_{kind}"
+            self._attr_translation_placeholders = {"number": str(partition)}
         if kind == "trouble":
             self._attr_device_class = BinarySensorDeviceClass.PROBLEM
-        else:
-            self._attr_entity_category = EntityCategory.DIAGNOSTIC
+        self._attr_entity_category = EntityCategory.DIAGNOSTIC
+        # Per-partition flags are usually identical: the panel-wide "Troubles"
+        # sensor is the one enabled by default.
+        self._attr_entity_registry_enabled_default = False
 
     @property
     def is_on(self) -> bool | None:
@@ -112,5 +117,35 @@ class BentelConnection(BentelEntity, BinarySensorEntity):
             "model": info.model,
             "firmware": info.firmware,
             "mac": info.identifier,
+            "system_label": self.client.system_label,
             "panel_time": self.client.panel_time.isoformat() if self.client.panel_time else None,
+        }
+
+
+class BentelTroubles(BentelEntity, BinarySensorEntity):
+    """On when any partition of the user reports troubles (faults, mains, battery...)."""
+
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+    _attr_translation_key = "troubles"
+
+    def __init__(self, entry: BentelConfigEntry) -> None:
+        super().__init__(entry, "troubles")
+
+    @property
+    def is_on(self) -> bool | None:
+        if not self.client.partitions:
+            return None
+        return any(s.troubles for s in self.client.partitions.values())
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {
+            "partitions_with_troubles": [
+                self.client.partition_labels.get(p, str(p))
+                for p, s in sorted(self.client.partitions.items())
+                if s.troubles
+            ],
+            "troubles_in_memory": any(
+                s.troubles_in_memory for s in self.client.partitions.values()
+            ),
         }

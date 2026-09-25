@@ -10,6 +10,15 @@ MANUFACTURER = "Bentel Security"
 CONF_PIN = "pin"
 CONF_POLL_INTERVAL = "poll_interval"
 CONF_REQUIRE_CODE = "require_code"
+CONF_ARM_MODES = "arm_modes"
+
+# Arm modes offered on each partition entity. Absoluta partitions are usually
+# just "armed" (away); stay and instant-stay are optional panel features.
+ARM_MODE_AWAY = "away"  # Absoluta "inserimento totale"
+ARM_MODE_HOME = "home"  # Absoluta "stay" / inserimento parziale
+ARM_MODE_NIGHT = "night"  # Absoluta "instant stay" / parziale istantaneo
+ARM_MODES_ALL = [ARM_MODE_AWAY, ARM_MODE_HOME, ARM_MODE_NIGHT]
+DEFAULT_ARM_MODES = [ARM_MODE_AWAY]
 
 DEFAULT_POLL_INTERVAL = 5
 MIN_POLL_INTERVAL = 2

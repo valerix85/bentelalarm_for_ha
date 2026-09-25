@@ -27,12 +27,25 @@ class FakePanel:
         partitions=(1, 2),
         multi_zone_ok: bool = True,
         send_zone_assignment: bool = True,
+        phantom_zones=(),
+        max_zones_per_reply: int | None = None,
+        zone_label_limit: int | None = None,
+        close_on_logout: bool = True,
     ) -> None:
         self.pin = pin
         self.zones = list(zones)
         self.partitions = list(partitions)
         self.multi_zone_ok = multi_zone_ok
         self.send_zone_assignment = send_zone_assignment
+        # In the assignment mask but refused by status requests (seen on an Absoluta 16)
+        self.phantom_zones = list(phantom_zones)
+        self.max_zones_per_reply = max_zones_per_reply
+        # Zone labels above this number are refused (real Absoluta 16 behaviour)
+        self.zone_label_limit = zone_label_limit
+        self.pending_bypass: dict[int, bool] = {}
+        # Real ABS-IP (fw 3.60.37) closes the TCP session after Exit Access Level
+        self.close_on_logout = close_on_logout
+        self.connections = 0
         self.zone_raw = {z: 0 for z in self.zones}
         self.part_raw = {p: bytearray(b"\x02\x00\x00") for p in self.partitions}
         self.outputs_on: set[int] = set()
@@ -58,11 +71,13 @@ class FakePanel:
 
     async def _handle(self, reader, writer) -> None:
         self.writer = writer
+        self.connections += 1
         self.seq = 0
         self.first = True
         self.rseq = 0
         self.expect_client_seq = 0
         self.app_seq = 0
+        self.awaiting_reply: set[int] = set()  # our app seqs not yet answered by 0502
         frames = FrameReader()
         try:
             while True:
@@ -113,6 +128,16 @@ class FakePanel:
     # -- application -------------------------------------------------------
 
     async def _on_command(self, cmd: int, p: bytes) -> None:
+        # Like the real ABS-IP, refuse to go on with the handshake until the
+        # client has answered our own 060A / 060E with a 0502.
+        if self.awaiting_reply and cmd in (
+            Cmd.REQUEST_ACCESS,
+            Cmd.SOFTWARE_VERSION,
+            Cmd.ENTER_ACCESS_LEVEL,
+        ):
+            self.errors.append(f"{cmd:04X} received before 0502 to panel command")
+            self._send(cmd_bytes(Cmd.COMMAND_ERROR) + cmd_bytes(cmd) + b"\x07")
+            return
         if cmd == Cmd.OPEN_SESSION:
             self._respond(p[0])
             self._send(
@@ -128,7 +153,7 @@ class FakePanel:
                 + bytes.fromhex("06 00034F060003")
             )
         elif cmd == Cmd.COMMAND_RESPONSE:
-            pass
+            self.awaiting_reply.discard(p[0])
         elif cmd == Cmd.SOFTWARE_VERSION:
             self._send(
                 cmd_bytes(Cmd.SOFTWARE_VERSION) + bytes.fromhex("35 00 00 1E 02 03 00 B3 01 03 01")
@@ -155,7 +180,9 @@ class FakePanel:
             )
             if self.send_zone_assignment:
                 self._send(
-                    cmd_bytes(Cmd.ZONE_ASSIGNMENT) + b"\x00" + m.list_to_bitmask(self.zones, 16)
+                    cmd_bytes(Cmd.ZONE_ASSIGNMENT)
+                    + b"\x00"
+                    + m.list_to_bitmask(self.zones + self.phantom_zones, 16)
                 )
             self._send(self._partition_status())
         elif cmd == Cmd.COMMAND_REQUEST:
@@ -196,7 +223,24 @@ class FakePanel:
             (self.outputs_on.add if p[off] == 1 else self.outputs_on.discard)(out)
             self._respond(seq)
             self._send(self._outputs())
-        elif cmd in (Cmd.USER_ACTIVITY, Cmd.EXIT_ACCESS_LEVEL):
+        elif cmd == Cmd.SINGLE_ZONE_BYPASS_WRITE:
+            seq, zone_off = p[0], 2  # app seq, partition (00)
+            zone, off = m.read_var(p, zone_off)
+            self.pending_bypass[zone] = bool(p[off])
+            self._respond(seq)
+        elif cmd == Cmd.EXIT_ACCESS_LEVEL:
+            # Absoluta finalises programming writes at log-out
+            for zone, on in self.pending_bypass.items():
+                self.zone_raw[zone] = (
+                    (self.zone_raw[zone] | 0x80) if on else (self.zone_raw[zone] & 0x7F)
+                )
+            self.pending_bypass.clear()
+            self.logged_in = False
+            self._respond(p[0])
+            if self.close_on_logout:
+                await self.writer.drain()
+                self.writer.close()
+        elif cmd == Cmd.USER_ACTIVITY:
             self._respond(p[0])
         elif cmd == Cmd.END_SESSION:
             self.writer.close()
@@ -223,17 +267,29 @@ class FakePanel:
             count, _ = m.read_var(d, off)
             if count > 1 and not self.multi_zone_ok:
                 return  # some panels never answer multi-zone reads
+            if any(z in self.phantom_zones for z in range(first, first + count)):
+                self._respond(seq, 0x02)  # invalid data for the requested command
+                return
+            if self.max_zones_per_reply:
+                count = min(count, self.max_zones_per_reply)
             body = m.var_bytes(first) + m.var_bytes(count) + b"\x01"
             body += bytes(self.zone_raw.get(z, 0) for z in range(first, first + count))
             self._send(cmd_bytes(Cmd.ZONE_STATUS) + body)
         elif req == Cmd.COMMAND_OUTPUT_ACTIVATION:
             self._send(self._outputs())
         elif req == Cmd.ZONE_ASSIGNMENT:
-            self._send(cmd_bytes(Cmd.ZONE_ASSIGNMENT) + b"\x00" + m.list_to_bitmask(self.zones, 16))
+            self._send(
+                cmd_bytes(Cmd.ZONE_ASSIGNMENT)
+                + b"\x00"
+                + m.list_to_bitmask(self.zones + self.phantom_zones, 16)
+            )
         elif req == Cmd.CONFIGURATION_BROADCAST:
             opt, off = m.read_var(d, 0)
             first, off = m.read_var(d, off)
             last, _ = m.read_var(d, off)
+            if opt == 1 and self.zone_label_limit and last > self.zone_label_limit:
+                self._respond(seq, 0x02)
+                return
             labels = b""
             for n in range(first, last + 1):
                 name = {1: "Zona", 3: "Area", 4: "Uscita", 13: "Modo"}.get(opt, "X")
@@ -243,7 +299,7 @@ class FakePanel:
                 + m.var_bytes(opt)
                 + m.var_bytes(first)
                 + m.var_bytes(last)
-                + m.var_bytes(16)
+                + m.var_bytes(len(labels))  # real panel: TOTAL length of the range
                 + labels
             )
         else:

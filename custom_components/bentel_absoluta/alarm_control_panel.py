@@ -13,7 +13,16 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import BentelConfigEntry
-from .const import CONF_PIN, CONF_REQUIRE_CODE, DOMAIN
+from .const import (
+    ARM_MODE_AWAY,
+    ARM_MODE_HOME,
+    ARM_MODE_NIGHT,
+    CONF_ARM_MODES,
+    CONF_PIN,
+    CONF_REQUIRE_CODE,
+    DEFAULT_ARM_MODES,
+    DOMAIN,
+)
 from .entity import BentelEntity
 from .itv2.client import ITv2Error
 from .itv2.const import ArmMode
@@ -31,12 +40,6 @@ async def async_setup_entry(
 class BentelPartition(BentelEntity, AlarmControlPanelEntity):
     """An Absoluta partition."""
 
-    _attr_supported_features = (
-        AlarmControlPanelEntityFeature.ARM_HOME
-        | AlarmControlPanelEntityFeature.ARM_AWAY
-        | AlarmControlPanelEntityFeature.ARM_NIGHT
-    )
-
     def __init__(self, entry: BentelConfigEntry, partition: int) -> None:
         super().__init__(entry, f"partition_{partition}")
         self.partition = partition
@@ -50,6 +53,15 @@ class BentelPartition(BentelEntity, AlarmControlPanelEntity):
         self._require_code = entry.options.get(CONF_REQUIRE_CODE, False)
         self._attr_code_arm_required = self._require_code
         self._attr_code_format = CodeFormat.NUMBER if self._require_code else None
+        modes = entry.options.get(CONF_ARM_MODES, DEFAULT_ARM_MODES)
+        features = AlarmControlPanelEntityFeature(0)
+        if ARM_MODE_AWAY in modes:
+            features |= AlarmControlPanelEntityFeature.ARM_AWAY
+        if ARM_MODE_HOME in modes:
+            features |= AlarmControlPanelEntityFeature.ARM_HOME
+        if ARM_MODE_NIGHT in modes:
+            features |= AlarmControlPanelEntityFeature.ARM_NIGHT
+        self._attr_supported_features = features
 
     @property
     def alarm_state(self) -> AlarmControlPanelState | None:
@@ -61,6 +73,8 @@ class BentelPartition(BentelEntity, AlarmControlPanelEntity):
         if self.partition in self.client.entry_delay or status.entry_delay:
             return AlarmControlPanelState.PENDING
         if not status.armed:
+            if self.partition in self.client.arming_requested:
+                return AlarmControlPanelState.ARMING
             return AlarmControlPanelState.DISARMED
         if self.partition in self.client.exit_delay or status.exit_delay:
             return AlarmControlPanelState.ARMING

@@ -11,9 +11,9 @@ Integrazione personalizzata per Home Assistant che si collega **localmente** all
 
 | Piattaforma | Cosa espone |
 |---|---|
-| `alarm_control_panel` | Un'entità per ogni **area** assegnata all'utente: inserimento Totale (away), Parziale (home = *stay*), Notte (= *stay istantaneo*), disinserimento. Stati `arming` (tempo di uscita), `pending` (tempo di ingresso), `triggered`. |
+| `alarm_control_panel` | Un'entità per ogni **area** assegnata all'utente: di default solo **inserimento totale** ("Fuori casa") e disinserimento; opzionalmente anche Parziale ("In casa" = *stay*) e Notte (= *stay istantaneo*). Stati `arming` (tempo di uscita), `pending` (tempo di ingresso), `triggered`. |
 | `binary_sensor` | Una per ogni **zona** (aperta/chiusa, con attributi allarme, memoria, sabotaggio, guasto, batteria bassa, esclusa); per ogni area *guasti* e *pronta*; stato della **connessione**. |
-| `switch` | Le **uscite programmabili** abilitate per l'utente. |
+| `switch` | Le **uscite programmabili** abilitate per l'utente e l'**esclusione** di ogni zona ("Esclusione Divano"…). L'esclusione viene applicata dalla centrale al logout, quindi l'integrazione fa logout e nuovo login in automatico (qualche secondo). Non creati se è attiva l'opzione *Richiedi il codice*. |
 | `button` | I **comandi remoti**, le **modalità di inserimento A-D** (globali), *cancella memoria allarmi*, *cancella allarmi/guasti/sabotaggi*. |
 | Eventi | `bentel_absoluta_event` con `type`: `arming`, `blocking_condition` (es. mancanza rete che impedisce l'inserimento), `trouble`, `arming_pre_alert`. |
 | Diagnostica | Download dalla pagina del dispositivo (PIN oscurato). |
@@ -37,6 +37,9 @@ IP dell'ABS-IP, porta e PIN utente.
 - **Intervallo di lettura dello stato** (default 5 s): l'ABS-IP *non* notifica spontaneamente
   l'apertura/chiusura delle zone, quindi vengono lette periodicamente. Lo stesso polling fa da
   keep-alive raccomandato dalla guida Bentel.
+- **Modalità di inserimento proposte** (default: solo *Fuori casa* = inserimento totale): aggiungi
+  *In casa* (parziale) e *Notte* (parziale istantaneo) solo se le usi sulla centrale.
+  I nomi "Fuori casa / In casa / Notte" sono quelli standard di Home Assistant.
 - **Richiedi il codice**: se attivo, le entità allarme chiedono il PIN per inserire/disinserire
   e i pulsanti delle modalità A-D non vengono creati.
 
@@ -47,6 +50,19 @@ IP dell'ABS-IP, porta e PIN utente.
   centrale la chiude. L'integrazione si ricollega da sola (back-off da 10 s a 5 min).
 - Vengono esposte solo le aree/zone/uscite assegnate all'utente del PIN configurato.
 - La cifratura AES dell'ABS-IP non è supportata: lasciala disabilitata per il client ITv2.
+
+## Limitazioni note
+
+- **Stato zone oltre il limite del modello**: la centrale dichiara via ITv2 un numero massimo di
+  zone (es. 16 su Absoluta 16). Anche se da BOSS sono configurate più zone (es. radio 17-20),
+  l'ABS-IP restituisce lo stato solo delle prime N: le altre non vengono create (il motivo è
+  visibile nella diagnostica, voce `invalid_zone_reasons`). Soluzione: usare per i sensori
+  importanti gli slot entro il limite.
+- **Uscite**: sono esposte solo le uscite *riservate* all'area con un'azione programmata
+  (è la centrale a decidere quali rendere disponibili a ITv2).
+- **Esclusione zone**: la centrale la applica al logout e poi chiude la sessione; l'integrazione
+  si ricollega da sola, per cui ogni esclusione richiede qualche secondo.
+- **Una sola connessione ITv2** e priorità più bassa di BOSS/app (vedi sopra).
 
 ## Debug
 
