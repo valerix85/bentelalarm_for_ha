@@ -223,3 +223,62 @@ async def test_arm_refused_open_zone(hass: HomeAssistant, panel: FakePanel) -> N
     assert hass.states.get("alarm_control_panel.bentel_absoluta_42_area_02").state == "disarmed"
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
+
+
+async def test_new_features(hass: HomeAssistant, panel: FakePanel) -> None:
+    from homeassistant.helpers import entity_registry as er
+
+    await hass.config.async_update(language="it")
+    panel.log_event(0x004D)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="00:03:4f:06:00:03",
+        version=1,
+        minor_version=1,
+        data={CONF_HOST: "127.0.0.1", CONF_PORT: panel.port, CONF_PIN: "1234"},
+        options={"poll_interval": 2, "arm_modes": ["away", "forced"]},
+    )
+    entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+    # an old (<=0.2.6) per-partition sensor, created enabled
+    old = registry.async_get_or_create(
+        "binary_sensor", DOMAIN, "00:03:4f:06:00:03_partition_1_trouble", config_entry=entry
+    )
+    assert old.disabled_by is None
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.minor_version == 2
+    assert registry.async_get(old.entity_id).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+
+    # last event sensor (Italian text)
+    sensors = [s for s in hass.states.async_all("sensor")]
+    assert len(sensors) == 1 and sensors[0].state == "Inser. eseguito"
+
+    # log events are fired on the bus
+    fired = []
+    hass.bus.async_listen("bentel_absoluta_event", lambda e: fired.append(e.data))
+    panel.log_event(0x1007, who=3)
+    await entry.runtime_data.check_events()
+    await hass.async_block_till_done()
+    assert any(d["type"] == "log" and d["zone"] == 3 for d in fired)
+    assert hass.states.get(sensors[0].entity_id).state.startswith("Allarme di zona")
+
+    # forced arming offered as custom bypass and works with an open zone
+    panel.zone_raw[3] = 0x01
+    glob = next(
+        s.entity_id
+        for s in hass.states.async_all("alarm_control_panel")
+        if s.attributes.get("armed_partitions") is not None
+    )
+    await hass.services.async_call(
+        "alarm_control_panel", "alarm_arm_custom_bypass", {"entity_id": glob}, blocking=True
+    )
+    assert panel.log[-1][0] == 0x0900 and panel.log[-1][1][-1] == 0x82
+
+    # clock sync button
+    button = next(s.entity_id for s in hass.states.async_all("button") if "orologio" in s.entity_id)
+    await hass.services.async_call("button", "press", {"entity_id": button}, blocking=True)
+    assert panel.panel_time is not None
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()

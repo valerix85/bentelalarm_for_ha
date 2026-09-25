@@ -34,12 +34,14 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import datetime as dt
 import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from . import events as ev
 from . import messages as msg
 from .const import (
     ARMING_TYPES,
@@ -73,6 +75,8 @@ APP_TIMEOUT = 6.0
 KEEP_ALIVE_INTERVAL = 5.0
 LABEL_CHUNK = 8
 MAX_ZONE_RUN = 64
+EVENTS_INTERVAL = 30.0
+EVENTS_READ = 5
 
 
 class ITv2Error(Exception):
@@ -182,6 +186,13 @@ class AbsolutaClient:
         self.stage = "idle"
         self.rx_packets = 0
         self.invalid_zones: set[int] = set()
+        self.partition_zones: dict[int, list[int]] = {}
+        # Event log (0101): most recent first
+        self.last_events: list[ev.PanelEvent] = []
+        self._events_supported = True
+        self._events_failures = 0
+        self._events_due = True
+        self._last_events_check = 0.0
         self.invalid_zone_reasons: dict[int, str] = {}
 
         # Listeners
@@ -650,16 +661,19 @@ class AbsolutaClient:
                 changed = True
                 self.request_refresh()
         elif cmd == Cmd.ARMING_DISARMING:
+            self._events_due = True
             if len(p) >= 2:
                 _, off = msg.read_var(p, 0)
                 arm_type = p[off]
                 self._event("arming", {"type": ARMING_TYPES.get(arm_type, arm_type)})
             self.request_refresh()
         elif cmd == Cmd.MISC_ALARM:
+            self._events_due = True
             _, off = msg.read_var(p, 0)
             alarm = p[off]
             self._event("blocking_condition", {"condition": MISC_ALARM_TYPES.get(alarm, alarm)})
         elif cmd == Cmd.TROUBLE_DETAIL_NOTIFICATION:
+            self._events_due = True
             self._handle_troubles(p)
             self.request_refresh()
         elif cmd == Cmd.ARMING_PRE_ALERT:
@@ -671,6 +685,8 @@ class AbsolutaClient:
             part, zones = msg.parse_zone_assignment(p)
             if not part:
                 self.user_zones = zones
+            else:
+                self.partition_zones[part] = zones
         elif cmd == Cmd.SYSTEM_CAPABILITIES:
             caps = msg.parse_system_capabilities(p)
             self.info.max_zones = caps.get("zones")
@@ -804,6 +820,24 @@ class AbsolutaClient:
             ]
         except (TimeoutError, ITv2Error, ValueError) as err:
             _LOGGER.debug("Enabled outputs read failed: %s", err)
+        for part in self.user_partitions:
+            if part in self.partition_zones:
+                continue
+            try:
+                await self._request(
+                    Cmd.COMMAND_REQUEST,
+                    msg.build_command_request(Cmd.ZONE_ASSIGNMENT, msg.var_bytes(part)),
+                    lambda c, pl, part=part: (
+                        True
+                        if c == Cmd.ZONE_ASSIGNMENT and msg.parse_zone_assignment(pl)[0] == part
+                        else None
+                    ),
+                    timeout=4,
+                )
+            except (TimeoutError, ITv2Error, ValueError) as err:
+                _LOGGER.debug("Zones of partition %d not available: %s", part, err)
+                break  # not supported by this firmware: don't insist
+
         if self.outputs:
             with contextlib.suppress(ITv2Error, asyncio.TimeoutError):
                 await self._request(
@@ -900,6 +934,86 @@ class AbsolutaClient:
         return await self._request(Cmd.COMMAND_REQUEST, msg.build_command_request(cmd, data), match)
 
     async def refresh(self) -> None:
+        """Poll partition and zone status once (and the event log when due)."""
+        await self._refresh_status()
+        if self._events_supported and (
+            self._events_due or time.monotonic() - self._last_events_check > EVENTS_INTERVAL
+        ):
+            await self.check_events()
+
+    async def read_events(self, first: int = 0, count: int = 5) -> list[ev.PanelEvent]:
+        """Read ``count`` log records starting from ``first`` (0 = most recent)."""
+
+        def match(cmd: int, payload: bytes):
+            if cmd != Cmd.EVENT_BUFFER_READ_RESPONSE:
+                return None
+            start, events = ev.parse_event_buffer_response(payload)
+            return events if start == first else None
+
+        return await self._request(
+            Cmd.EVENT_BUFFER_READ,
+            bytes([0x03]) + first.to_bytes(2, "big") + count.to_bytes(2, "big"),
+            match,
+            timeout=4,
+        )
+
+    async def check_events(self) -> None:
+        """Fetch the latest log records and emit the new ones as events."""
+        self._events_due = False
+        self._last_events_check = time.monotonic()
+        try:
+            latest = await self.read_events(0, EVENTS_READ)
+        except CommandFailed as err:
+            _LOGGER.info("Event log not available on this panel (%s)", err)
+            self._events_supported = False
+            return
+        except (TimeoutError, ValueError) as err:
+            self._events_failures += 1
+            _LOGGER.debug("Event log read failed (%d): %s", self._events_failures, err)
+            if self._events_failures >= 3:
+                _LOGGER.info("Event log does not answer, not reading it anymore")
+                self._events_supported = False
+            return
+        self._events_failures = 0
+        if not latest:
+            return
+        previous = {e.key for e in self.last_events}
+        new = [e for e in latest if e.key not in previous] if previous else []
+        self.last_events = latest
+        for event in reversed(new):  # chronological order
+            self._event(
+                "log",
+                {
+                    "text": event.text(True),
+                    "text_en": event.text(False),
+                    "event_id": f"0x{event.event_id:04X}",
+                    "class": event.cls,
+                    "restore": event.restore,
+                    "zone": event.zone,
+                    "zone_label": self.zone_labels.get(event.zone) if event.zone else None,
+                    "partitions": list(event.partitions),
+                    "timestamp": event.timestamp.isoformat() if event.timestamp else None,
+                },
+            )
+        if new or len(previous) == 0:
+            self._notify()
+
+    async def sync_time(self, now: dt.datetime) -> None:
+        """Set the panel clock (Time and Date Write 0741). ``now`` is local time."""
+        await self._request(Cmd.TIME_DATE_WRITE, msg.encode_datetime(now))
+        self.panel_time = now.replace(tzinfo=None, microsecond=0)
+        self._notify()
+
+    def open_zones(self, partition: int = 0) -> list[int]:
+        """Open, not bypassed zones (of one partition, when known)."""
+        zones = self.partition_zones.get(partition) if partition else None
+        return [
+            z
+            for z, st in sorted(self.zones.items())
+            if st.open and not st.bypassed and (zones is None or z in zones)
+        ]
+
+    async def _refresh_status(self) -> None:
         """Poll partition and zone status once."""
         if self.user_partitions:
             await self._request_status(

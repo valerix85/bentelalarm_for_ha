@@ -9,6 +9,7 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.util import dt as dt_util
 
 from . import BentelConfigEntry
 from .const import CONF_REQUIRE_CODE, DOMAIN
@@ -63,6 +64,15 @@ async def async_setup_entry(
             "clear_alarm_memory",
             lambda c: c.user_activity(UserActivity.CLEAR_ALARM_MEMORY),
             translation_key="clear_alarm_memory",
+            category=EntityCategory.CONFIG,
+        )
+    )
+    entities.append(
+        BentelButton(
+            entry,
+            "sync_time",
+            lambda c: c.sync_time(dt_util.now().replace(tzinfo=None, microsecond=0)),
+            translation_key="sync_time",
             category=EntityCategory.CONFIG,
         )
     )

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
@@ -13,6 +14,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.helpers import entity_registry as er
 
 from .const import (
     CONF_PIN,
@@ -29,6 +31,7 @@ PLATFORMS: list[Platform] = [
     Platform.ALARM_CONTROL_PANEL,
     Platform.BINARY_SENSOR,
     Platform.BUTTON,
+    Platform.SENSOR,
     Platform.SWITCH,
 ]
 
@@ -82,3 +85,22 @@ async def async_unload_entry(hass: HomeAssistant, entry: BentelConfigEntry) -> b
     if unloaded:
         await entry.runtime_data.stop()
     return unloaded
+
+
+_PARTITION_FLAG = re.compile(r"_partition_\d+_(trouble|ready)$")
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: BentelConfigEntry) -> bool:
+    """1.1 -> 1.2: per-partition trouble/ready sensors are now disabled by default
+    (replaced by the panel-wide "Troubles" sensor): disable the ones created
+    enabled by older versions, unless the user already changed them."""
+    if entry.version == 1 and entry.minor_version < 2:
+        registry = er.async_get(hass)
+        for reg in er.async_entries_for_config_entry(registry, entry.entry_id):
+            if reg.disabled_by is None and _PARTITION_FLAG.search(reg.unique_id):
+                registry.async_update_entity(
+                    reg.entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION
+                )
+        hass.config_entries.async_update_entry(entry, minor_version=2)
+        _LOGGER.debug("Migrated %s to version 1.2", entry.entry_id)
+    return True

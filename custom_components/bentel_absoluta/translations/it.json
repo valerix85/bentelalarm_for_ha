@@ -119,6 +119,14 @@
       },
       "clear_all": {
         "name": "Cancella allarmi, guasti e sabotaggi"
+      },
+      "sync_time": {
+        "name": "Sincronizza orologio"
+      }
+    },
+    "sensor": {
+      "last_event": {
+        "name": "Ultimo evento"
       }
     }
   },
@@ -141,7 +149,8 @@
       "options": {
         "away": "Fuori casa – inserimento totale",
         "home": "In casa – inserimento parziale (stay)",
-        "night": "Notte – parziale istantaneo (senza ritardo di ingresso)"
+        "night": "Notte – parziale istantaneo (senza ritardo di ingresso)",
+        "forced": "Forzato – inserimento totale anche con zone aperte (vengono escluse). In Home Assistant appare come \"bypass personalizzato\"."
       }
     }
   }

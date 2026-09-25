@@ -297,3 +297,40 @@ async def test_zone_bypass_and_optimistic_disarm():
     finally:
         await client.stop()
         await panel.stop()
+
+
+async def test_event_log_time_sync_and_partition_zones():
+    import datetime as dt
+
+    from itv2 import events as ev
+
+    panel = FakePanel()
+    panel.log_event(0x004D)  # arming OK
+    client = await _started(panel, load_labels=True)
+    try:
+        assert client.partition_zones == {1: [1, 3, 5], 2: [2]}
+        assert [e.text() for e in client.last_events] == ["Inser. eseguito"]
+        logged = []
+        client.add_event_listener(lambda t, d: logged.append((t, d)))
+        panel.log_event(0x1007, who=3)  # zone alarm, zone 3
+        panel.log_event(0x3818, where=0x0A)  # restore: panel no battery
+        await client.check_events()
+        texts = [d["text"] for t, d in logged if t == "log"]
+        assert texts == ["Allarme di zona", "Ripristino: Cent.NO batteria"]
+        zone_event = next(d for t, d in logged if t == "log" and d["zone"])
+        assert zone_event["zone"] == 3 and zone_event["zone_label"] == "Zona 03"
+        assert client.last_events[0].restore
+
+        now = dt.datetime(2026, 9, 25, 11, 30, 15)
+        await client.sync_time(now)
+        assert ev.decode_datetime(panel.panel_time) == now
+
+        panel.zone_raw[3] = 0x01
+        panel.zone_raw[2] = 0x01
+        await client.refresh()
+        assert client.open_zones(1) == [3]
+        assert client.open_zones(0) == [2, 3]
+        assert not panel.errors
+    finally:
+        await client.stop()
+        await panel.stop()

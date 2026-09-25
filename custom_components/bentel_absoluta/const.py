@@ -17,7 +17,8 @@ CONF_ARM_MODES = "arm_modes"
 ARM_MODE_AWAY = "away"  # Absoluta "inserimento totale"
 ARM_MODE_HOME = "home"  # Absoluta "stay" / inserimento parziale
 ARM_MODE_NIGHT = "night"  # Absoluta "instant stay" / parziale istantaneo
-ARM_MODES_ALL = [ARM_MODE_AWAY, ARM_MODE_HOME, ARM_MODE_NIGHT]
+ARM_MODE_FORCED = "forced"  # Absoluta "forcing away arm": arms even with open zones
+ARM_MODES_ALL = [ARM_MODE_AWAY, ARM_MODE_HOME, ARM_MODE_NIGHT, ARM_MODE_FORCED]
 DEFAULT_ARM_MODES = [ARM_MODE_AWAY]
 
 DEFAULT_POLL_INTERVAL = 5

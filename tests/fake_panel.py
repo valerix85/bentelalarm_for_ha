@@ -43,6 +43,8 @@ class FakePanel:
         # Zone labels above this number are refused (real Absoluta 16 behaviour)
         self.zone_label_limit = zone_label_limit
         self.pending_bypass: dict[int, bool] = {}
+        self.event_log: list[bytes] = []  # 13-byte records, most recent first
+        self.panel_time: bytes | None = None
         # Real ABS-IP (fw 3.60.37) closes the TCP session after Exit Access Level
         self.close_on_logout = close_on_logout
         self.connections = 0
@@ -200,7 +202,7 @@ class FakePanel:
             seq, (part, off) = p[0], m.read_var(p, 1)
             mode = p[off]
             targets = self.partitions if not part else [part]
-            if any(self.zone_raw[z] & 1 for z in self.zones):
+            if not mode & 0x80 and any(self.zone_raw[z] & 1 for z in self.zones):
                 self._respond(seq, 0x01)
                 self._send(cmd_bytes(Cmd.MISC_ALARM) + bytes.fromhex("00 FF 01"))
                 return
@@ -242,6 +244,20 @@ class FakePanel:
                 self.writer.close()
         elif cmd == Cmd.USER_ACTIVITY:
             self._respond(p[0])
+        elif cmd == Cmd.EVENT_BUFFER_READ:
+            first = (p[2] << 8) | p[3]
+            count = (p[4] << 8) | p[5]
+            records = self.event_log[first : first + count]
+            self._send(
+                cmd_bytes(Cmd.EVENT_BUFFER_READ_RESPONSE)
+                + bytes([0x03])
+                + first.to_bytes(2, "big")
+                + len(records).to_bytes(2, "big")
+                + b"".join(records)
+            )
+        elif cmd == Cmd.TIME_DATE_WRITE:
+            self.panel_time = p[1:5]
+            self._respond(p[0])
         elif cmd == Cmd.END_SESSION:
             self.writer.close()
         else:
@@ -277,6 +293,12 @@ class FakePanel:
             self._send(cmd_bytes(Cmd.ZONE_STATUS) + body)
         elif req == Cmd.COMMAND_OUTPUT_ACTIVATION:
             self._send(self._outputs())
+        elif req == Cmd.ZONE_ASSIGNMENT and d[:1] == b"\x01" and d[1] != 0:
+            part = d[1]
+            mine = [z for z in self.zones if self.zone_partition(z) == part]
+            self._send(
+                cmd_bytes(Cmd.ZONE_ASSIGNMENT) + bytes([1, part]) + m.list_to_bitmask(mine, 16)
+            )
         elif req == Cmd.ZONE_ASSIGNMENT:
             self._send(
                 cmd_bytes(Cmd.ZONE_ASSIGNMENT)
@@ -306,6 +328,20 @@ class FakePanel:
             self._respond(seq, 0x01)
 
     # -- helpers for tests -------------------------------------------------
+
+    def zone_partition(self, zone: int) -> int:
+        return self.partitions[(zone - 1) % len(self.partitions)]
+
+    def log_event(self, event_id: int, where: int = 0, who: int = 0xFF, parts=(1,)) -> None:
+        mask = m.list_to_bitmask(list(parts), 2)
+        rec = (
+            bytes.fromhex("98829A69")
+            + b"\x09"
+            + event_id.to_bytes(2, "big")
+            + bytes([where, who])
+            + bytes([0, 0, mask[1], mask[0]])
+        )
+        self.event_log.insert(0, rec)
 
     def push_partition_status(self) -> None:
         self._send(self._partition_status())

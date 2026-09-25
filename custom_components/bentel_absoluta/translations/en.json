@@ -119,6 +119,14 @@
       },
       "clear_all": {
         "name": "Clear alarms, faults and tampers"
+      },
+      "sync_time": {
+        "name": "Sync panel clock"
+      }
+    },
+    "sensor": {
+      "last_event": {
+        "name": "Last event"
       }
     }
   },
@@ -141,7 +149,8 @@
       "options": {
         "away": "Away – full arming (Absoluta \"total\")",
         "home": "Home – stay arming (Absoluta \"partial\")",
-        "night": "Night – instant stay (partial, no entry delay)"
+        "night": "Night – instant stay (partial, no entry delay)",
+        "forced": "Forced – full arming even with open zones (they are bypassed). Shown as \"custom bypass\"."
       }
     }
   }

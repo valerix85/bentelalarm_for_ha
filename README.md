@@ -13,8 +13,9 @@ Integrazione personalizzata per Home Assistant che si collega **localmente** all
 |---|---|
 | `alarm_control_panel` | **Globale**: inserisce/disinserisce tutte le aree dell'utente con un solo comando (stato combinato; se solo alcune aree sono inserite: "Attivo con bypass personalizzato" + attributi `armed_partitions`/`disarmed_partitions`). Poi un'entità per ogni **area** assegnata all'utente: di default solo **inserimento totale** ("Fuori casa") e disinserimento; opzionalmente anche Parziale ("In casa" = *stay*) e Notte (= *stay istantaneo*). Stati `arming` (tempo di uscita), `pending` (tempo di ingresso), `triggered`. |
 | `binary_sensor` | Una per ogni **zona** (aperta/chiusa, con attributi allarme, memoria, sabotaggio, guasto, batteria bassa, esclusa); per ogni area *guasti* e *pronta*; stato della **connessione**. |
+| `sensor` | **Ultimo evento** del registro della centrale (es. "Inser. eseguito", "Allarme di zona – Fin studio"), con data/ora e gli ultimi 5 eventi negli attributi. Ogni nuovo evento è anche emesso come `bentel_absoluta_event` con `type: log`. |
 | `switch` | Le **uscite programmabili** abilitate per l'utente e l'**esclusione** di ogni zona ("Esclusione Divano"…). L'esclusione viene applicata dalla centrale al logout, quindi l'integrazione fa logout e nuovo login in automatico (qualche secondo). Non creati se è attiva l'opzione *Richiedi il codice*. |
-| `button` | I **comandi remoti**, le **modalità di inserimento A-D** (globali), *cancella memoria allarmi*, *cancella allarmi/guasti/sabotaggi*. |
+| `button` | I **comandi remoti**, le **modalità di inserimento A-D** (globali), *cancella memoria allarmi*, *cancella allarmi/guasti/sabotaggi*, *sincronizza orologio* (imposta sulla centrale l'ora di Home Assistant). |
 | Eventi | `bentel_absoluta_event` con `type`: `arming`, `blocking_condition` (es. mancanza rete che impedisce l'inserimento), `trouble`, `arming_pre_alert`. |
 | Diagnostica | Download dalla pagina del dispositivo (PIN oscurato). |
 
@@ -38,7 +39,9 @@ IP dell'ABS-IP, porta e PIN utente.
   l'apertura/chiusura delle zone, quindi vengono lette periodicamente. Lo stesso polling fa da
   keep-alive raccomandato dalla guida Bentel.
 - **Modalità di inserimento proposte** (default: solo *Fuori casa* = inserimento totale): aggiungi
-  *In casa* (parziale) e *Notte* (parziale istantaneo) solo se le usi sulla centrale.
+  *In casa* (parziale) e *Notte* (parziale istantaneo) solo se le usi sulla centrale, e
+  *Forzato* (inserimento totale anche con zone aperte, che vengono escluse; in Home Assistant
+  appare come "bypass personalizzato") solo se ti serve davvero.
   I nomi "Fuori casa / In casa / Notte" sono quelli standard di Home Assistant.
 - **Richiedi il codice**: se attivo, le entità allarme chiedono il PIN per inserire/disinserire
   e i pulsanti delle modalità A-D non vengono creati.
@@ -63,7 +66,8 @@ IP dell'ABS-IP, porta e PIN utente.
 - **Esclusione zone**: la centrale la applica al logout e poi chiude la sessione; l'integrazione
   si ricollega da sola, per cui ogni esclusione richiede qualche secondo.
 - **Inserimento rifiutato**: se una zona è aperta (o c'è una condizione di blocco) la centrale
-  rifiuta l'inserimento; Home Assistant mostra l'errore con l'elenco delle zone aperte e lo
+  rifiuta l'inserimento; Home Assistant mostra l'errore con l'elenco delle zone aperte
+  (dell'area interessata, se la centrale fornisce l'associazione zone-aree) e lo
   stato resta invariato. Con l'entità *Globale* alcune aree potrebbero inserirsi e altre no:
   lo stato diventa parziale e gli attributi indicano quali.
 - **Una sola connessione ITv2** e priorità più bassa di BOSS/app (vedi sopra).

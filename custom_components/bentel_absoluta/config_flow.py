@@ -74,6 +74,7 @@ class BentelConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow."""
 
     VERSION = 1
+    MINOR_VERSION = 2
 
     _error_detail = ""
 

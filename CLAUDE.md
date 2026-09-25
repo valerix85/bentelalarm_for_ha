@@ -40,3 +40,9 @@ Integrazione Home Assistant per centrali Bentel Absoluta via ABS-IP, protocollo 
 - Stato zone oltre max_zones (0613): su Absoluta 16 fw 3.60.37 una richiesta 0811 per la zona 17
   (o 18, 20) riceve comunque la risposta con le zone 1..16. Lo stato delle zone >16 NON è
   disponibile via ITv2 (le etichette sì). Non è un bug del client.
+- Registro eventi 0101/4101: record da 13 byte = data(4) flags(1) event id(2: classe<<12 |
+  ripristino<<11 | codice) indice(2: where, who) maschera aree(4, contano gli ultimi 2 byte).
+  Verificato sugli esempi della guida. DA VERIFICARE su centrale reale: WHO = numero zona 1-based
+  per gli eventi di zona (ipotesi da Appendice C).
+- Zone per area: 0800 -> 0770 con area != 0 (fw >= 3.50.80). Se non risponde si usa l'elenco globale.
+- Ora centrale: 0741 con data/ora ITv2 in ora locale.

@@ -19,6 +19,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from . import BentelConfigEntry
 from .const import (
     ARM_MODE_AWAY,
+    ARM_MODE_FORCED,
     ARM_MODE_HOME,
     ARM_MODE_NIGHT,
     CONF_ARM_MODES,
@@ -95,6 +96,9 @@ class BentelPartition(BentelEntity, AlarmControlPanelEntity):
             features |= AlarmControlPanelEntityFeature.ARM_HOME
         if ARM_MODE_NIGHT in modes:
             features |= AlarmControlPanelEntityFeature.ARM_NIGHT
+        if ARM_MODE_FORCED in modes:
+            # HA "custom bypass" = Absoluta forced arming (open zones are bypassed)
+            features |= AlarmControlPanelEntityFeature.ARM_CUSTOM_BYPASS
         self._attr_supported_features = features
 
     @property
@@ -113,6 +117,16 @@ class BentelPartition(BentelEntity, AlarmControlPanelEntity):
             "bypassed_zones": status.bypassed_zones,
             "in_test": status.in_test,
             "fire_alarm": status.fire_alarm,
+            "zones": [
+                self.client.zone_labels.get(z, str(z))
+                for z in self.client.partition_zones.get(self.partition, [])
+            ],
+            "open_zones": [
+                self.client.zone_labels.get(z, str(z))
+                for z in self.client.open_zones(self.partition)
+            ]
+            if self.partition in self.client.partition_zones
+            else None,
             "raw_status": status.raw.hex(),
         }
 
@@ -137,8 +151,7 @@ class BentelPartition(BentelEntity, AlarmControlPanelEntity):
                 # (mains/battery/tamper fault, notified separately by 0841).
                 open_zones = [
                     self.client.zone_labels.get(z, str(z))
-                    for z, st in sorted(self.client.zones.items())
-                    if st.open and not st.bypassed
+                    for z in self.client.open_zones(self.partition)
                 ]
                 raise HomeAssistantError(
                     translation_domain=DOMAIN,
@@ -172,6 +185,11 @@ class BentelPartition(BentelEntity, AlarmControlPanelEntity):
     async def async_alarm_arm_night(self, code: str | None = None) -> None:
         self._check_code(code)
         await self._run(self.client.arm(self.partition, ArmMode.INSTANT_STAY))
+
+    async def async_alarm_arm_custom_bypass(self, code: str | None = None) -> None:
+        """Forced away arming: the panel arms even with zones left open."""
+        self._check_code(code)
+        await self._run(self.client.arm(self.partition, ArmMode.FORCE_AWAY))
 
 
 _ARMED = {
