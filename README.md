@@ -24,9 +24,10 @@ fully local, no cloud account, no MQTT bridge, no extra hardware.
 ## Requirements
 
 - An Absoluta panel with the **ABS-IP** module on your network
-- The **ITv2** protocol enabled on the ABS-IP with **encryption disabled**; the TCP port is
-  **3064** by default (these are installer settings, see the Absoluta installer manual or ask
-  your installer)
+- The **ITv2** protocol on the ABS-IP, with **encryption disabled**, on TCP port **3064**
+  (default). On the panels tested so far this works out of the box, with no change in BOSS;
+  port and encryption are installer settings (see the Absoluta installer manual or ask your
+  installer) if yours were changed
 - The **PIN** of a Master, Normal or Limited user: the integration sees only the partitions,
   zones and outputs assigned to that user
 
@@ -34,10 +35,11 @@ fully local, no cloud account, no MQTT bridge, no extra hardware.
 
 | Panel | Firmware | Status |
 |---|---|---|
-| Absoluta 16 + ABS-IP | 3.60.37 | ✅ Working |
+| Absoluta 16 + ABS-IP | 3.60.37 | ✅ Tested by the author |
+| Absoluta Plus 48 + ABS-IP | 4.30.35 | ✅ Reported working by a user |
 
-Other models (Absoluta 42, 104) and firmware versions should work but have not been tested
-yet: feedback is very welcome, please [open an issue](https://github.com/valerix85/bentelalarm_for_ha/issues/new/choose).
+Other models and firmware versions should work but have not been tested yet: feedback is
+very welcome, please [open an issue](https://github.com/valerix85/bentelalarm_for_ha/issues/new/choose).
 
 ## Installation
 
@@ -72,6 +74,7 @@ Available from the integration's **Configure** button:
 | Status polling interval | 5 s | The ABS-IP does not push zone open/closed changes, so zones are read at this interval. |
 | Arm modes | Away | Add *Home* (stay) and *Night* (instant stay) only if you use them on the panel. *Forced* arms even with open zones, which get bypassed; it appears in Home Assistant as "custom bypass". |
 | Require code | Off | Home Assistant asks for the PIN to arm/disarm. Arming mode buttons and zone bypass switches are not created. |
+| Additional zones | – | Zones to show even if the panel does not assign them to the user, e.g. chime or real-time zones that belong to no partition (`15, 16` or `20-22`). No bypass switch is created for them. |
 
 ## Entities
 
@@ -132,6 +135,10 @@ automation:
   (16 on an Absoluta 16). Zones configured above it (e.g. wireless zones 17–20) are not
   created because the ABS-IP does not return their status. Use slots within the limit for
   important sensors.
+- **Zones not assigned to the user**: the integration creates the zones the panel assigns
+  to the configured user. Zones in partitions the user cannot access, or special zones that
+  belong to no partition (e.g. chime, real-time), are missing: enable the user on that
+  partition in BOSS, or list them in the *Additional zones* option.
 - **Outputs**: only outputs reserved to the user's partitions with a programmed action are
   available over ITv2.
 - ABS-IP **AES encryption** is not supported.

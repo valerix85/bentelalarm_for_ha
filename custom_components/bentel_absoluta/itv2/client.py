@@ -152,6 +152,7 @@ class AbsolutaClient:
         poll_interval: float = 5.0,
         connect_timeout: float = 10.0,
         load_labels: bool = True,
+        extra_zones: list[int] | tuple[int, ...] = (),
     ) -> None:
         msg.encode_pin(pin)  # validate early
         self.host = host
@@ -160,13 +161,17 @@ class AbsolutaClient:
         self.poll_interval = max(0.1, poll_interval)
         self._connect_timeout = connect_timeout
         self._load_labels = load_labels
+        # Zones to expose even if the panel does not assign them to the user
+        # (e.g. chime or "real time" zones that belong to no partition)
+        self.extra_zones: list[int] = sorted({z for z in extra_zones if 1 <= z <= MAX_ZONES})
 
         # Public state
         self.info = msg.PanelInfo()
         self.partitions: dict[int, msg.PartitionStatus] = {}
         self.zones: dict[int, msg.ZoneStatus] = {}
         self.user_partitions: list[int] = []
-        self.user_zones: list[int] = []
+        self.user_zones: list[int] = []  # zones exposed: assigned + extra
+        self.assigned_zones: list[int] = []  # zones the panel assigns to the user (0770)
         self.outputs: list[int] = []  # programmable outputs usable by the user
         self.remote_commands: list[int] = []  # remote commands 1..32
         self.outputs_on: set[int] = set()
@@ -687,7 +692,7 @@ class AbsolutaClient:
         elif cmd == Cmd.ZONE_ASSIGNMENT:
             part, zones = msg.parse_zone_assignment(p)
             if not part:
-                self.user_zones = zones
+                self._set_assigned_zones(zones)
             else:
                 self.partition_zones[part] = zones
         elif cmd == Cmd.SYSTEM_CAPABILITIES:
@@ -778,6 +783,10 @@ class AbsolutaClient:
         if lead_in not in done:
             _LOGGER.debug("No Access Level Lead-In received")
 
+    def _set_assigned_zones(self, zones: list[int]) -> None:
+        self.assigned_zones = sorted(zones)
+        self.user_zones = sorted(set(zones) | set(self.extra_zones))
+
     async def _discover(self) -> None:
         # Partitions assigned to the user
         if not self.user_partitions:
@@ -797,13 +806,13 @@ class AbsolutaClient:
                     msg.build_command_request(Cmd.ZONE_ASSIGNMENT, msg.var_bytes(0)),
                     lambda c, p: p if c == Cmd.ZONE_ASSIGNMENT else None,
                 )
-                self.user_zones = msg.parse_zone_assignment(data)[1]
+                self._set_assigned_zones(msg.parse_zone_assignment(data)[1])
             except (TimeoutError, ITv2Error, ValueError) as err:
                 _LOGGER.debug("Zone assignment request failed: %s", err)
         if not self.user_zones:
             count = self.info.max_zones or MAX_ZONES
             _LOGGER.info("Zone assignment unavailable, using zones 1..%d", count)
-            self.user_zones = list(range(1, min(count, MAX_ZONES) + 1))
+            self._set_assigned_zones(list(range(1, min(count, MAX_ZONES) + 1)))
         # NB: do not filter by 0613 "max zones": an Absoluta 16 (fw 3.60.37) reports
         # 16 but has radio zones 17, 18, 20 configured. Missing zones are
         # detected by probing them after the first poll instead.

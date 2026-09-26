@@ -31,6 +31,8 @@ async def async_get_config_entry_diagnostics(
         },
         "user_partitions": client.user_partitions,
         "user_zones": client.user_zones,
+        "assigned_zones": client.assigned_zones,
+        "extra_zones": client.extra_zones,
         "invalid_zones": sorted(client.invalid_zones),
         "invalid_zone_reasons": client.invalid_zone_reasons,
         "zone_labels": client.zone_labels,

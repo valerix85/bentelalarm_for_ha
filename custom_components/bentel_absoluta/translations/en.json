@@ -51,17 +51,20 @@
         "data": {
           "poll_interval": "Status polling interval",
           "require_code": "Require the code to arm/disarm from Home Assistant",
-          "arm_modes": "Arm modes offered on each partition"
+          "arm_modes": "Arm modes offered on each partition",
+          "extra_zones": "Additional zones"
         },
         "data_description": {
           "poll_interval": "Zone open/closed state is not pushed by the panel and is polled at this interval (it also works as keep-alive).",
           "require_code": "When enabled the alarm panel entities ask for the user PIN, and the arming-mode buttons and zone bypass switches are not created.",
-          "arm_modes": "Absoluta partitions are normally just armed or disarmed (Away). Enable Home (stay) and Night (instant stay) only if you use them on the panel."
+          "arm_modes": "Absoluta partitions are normally just armed or disarmed (Away). Enable Home (stay) and Night (instant stay) only if you use them on the panel.",
+          "extra_zones": "Zones to show even if the panel does not assign them to the user, e.g. chime or real-time zones that belong to no partition. Zone numbers separated by commas, ranges allowed (e.g. 15, 16 or 20-22). Bypass switches are not created for these zones."
         }
       }
     },
     "error": {
-      "no_arm_mode": "Select at least one arm mode."
+      "no_arm_mode": "Select at least one arm mode.",
+      "invalid_zone_list": "Enter zone numbers between 1 and 128 separated by commas (e.g. 15, 16 or 20-22)."
     }
   },
   "entity": {

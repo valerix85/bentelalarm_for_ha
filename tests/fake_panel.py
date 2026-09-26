@@ -31,6 +31,7 @@ class FakePanel:
         max_zones_per_reply: int | None = None,
         zone_label_limit: int | None = None,
         close_on_logout: bool = True,
+        unassigned_zones=(),
     ) -> None:
         self.pin = pin
         self.zones = list(zones)
@@ -48,7 +49,10 @@ class FakePanel:
         # Real ABS-IP (fw 3.60.37) closes the TCP session after Exit Access Level
         self.close_on_logout = close_on_logout
         self.connections = 0
-        self.zone_raw = {z: 0 for z in self.zones}
+        # Readable zones not in the user's assignment mask (chime / real-time zones
+        # that belong to no partition, seen on an Absoluta Plus 48)
+        self.unassigned_zones = list(unassigned_zones)
+        self.zone_raw = {z: 0 for z in self.zones + self.unassigned_zones}
         self.part_raw = {p: bytearray(b"\x02\x00\x00") for p in self.partitions}
         self.outputs_on: set[int] = set()
         self.log: list[tuple[int, bytes]] = []  # commands received (cmd, payload)

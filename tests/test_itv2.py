@@ -356,3 +356,15 @@ async def test_bypass_event_not_hidden_by_own_relogin():
     finally:
         await client.stop()
         await panel.stop()
+
+
+def test_parse_zone_list() -> None:
+    from custom_components.bentel_absoluta.const import parse_zone_list
+
+    assert parse_zone_list("") == []
+    assert parse_zone_list(None) == []
+    assert parse_zone_list("16, 15") == [15, 16]
+    assert parse_zone_list("15 16;20-22") == [15, 16, 20, 21, 22]
+    for bad in ("x", "0", "129", "5-3", "1-"):
+        with pytest.raises(ValueError):
+            parse_zone_list(bad)

@@ -290,3 +290,52 @@ async def test_new_features(hass: HomeAssistant, panel: FakePanel) -> None:
 
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
+
+
+async def test_extra_zones_option(hass: HomeAssistant, socket_enabled) -> None:
+    fake = FakePanel(unassigned_zones=(7,))
+    await fake.start()
+    try:
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            unique_id="00:03:4f:06:00:03",
+            data={CONF_HOST: "127.0.0.1", CONF_PORT: fake.port, CONF_PIN: "1234"},
+            options={"poll_interval": 2},
+        )
+        entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        assert hass.states.get("binary_sensor.bentel_absoluta_42_zona_07") is None
+
+        # invalid list is rejected
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"poll_interval": 2, "arm_modes": ["away"], "extra_zones": "7, x"}
+        )
+        assert result["errors"] == {"extra_zones": "invalid_zone_list"}
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"poll_interval": 2, "arm_modes": ["away"], "extra_zones": "7"}
+        )
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        await hass.async_block_till_done()
+        await asyncio.sleep(0.5)
+        await hass.async_block_till_done()
+
+        client = entry.runtime_data
+        assert 7 in client.user_zones and 7 not in client.assigned_zones
+        assert hass.states.get("binary_sensor.bentel_absoluta_42_zona_07").state == "off"
+        # no bypass switch for zones not assigned to the user
+        switches = [s.entity_id for s in hass.states.async_all("switch")]
+        assert not any("zona_07" in s for s in switches)
+        assert any("zona_01" in s for s in switches)
+
+        fake.zone_raw[7] = 0x01
+        await asyncio.sleep(2.5)
+        await hass.async_block_till_done()
+        assert hass.states.get("binary_sensor.bentel_absoluta_42_zona_07").state == "on"
+
+        assert await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+        assert not fake.errors
+    finally:
+        await fake.stop()

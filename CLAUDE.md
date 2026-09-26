@@ -50,6 +50,9 @@ The repository is English-only (code, comments, docs); Italian is used only in
   is logged as "Isolata zona" / "Zone Isolated" (class 4, code 0x03); removing it logs the restore
   of that event plus class 0 code 0x0D, which the guide leaves blank: the "Last event" sensor
   skips undocumented codes.
+- Absoluta Plus 48 fw 4.30.35 (user report): all 48 zones answer 0811 normally, but a chime
+  zone and a "real time" zone were missing from the user's 0770 mask (probably no partition)
+  while their status is readable: exposed via the "extra_zones" option (no bypass switch).
 - Zones per partition: 0800 -> 0770 with partition != 0 (fw >= 3.50.80). If unanswered the
   global list is used.
 - Panel clock: 0741 with ITv2 date/time in local time.

@@ -51,17 +51,20 @@
         "data": {
           "poll_interval": "Intervallo di lettura dello stato",
           "require_code": "Richiedi il codice per inserire/disinserire da Home Assistant",
-          "arm_modes": "Modalità di inserimento proposte per ogni area"
+          "arm_modes": "Modalità di inserimento proposte per ogni area",
+          "extra_zones": "Zone aggiuntive"
         },
         "data_description": {
           "poll_interval": "Lo stato aperto/chiuso delle zone non viene notificato dalla centrale e viene letto a questo intervallo (funziona anche da keep-alive).",
           "require_code": "Se attivo, le entità di allarme chiedono il PIN utente e i pulsanti delle modalità di inserimento e gli interruttori di esclusione zona non vengono creati.",
-          "arm_modes": "Le aree Absoluta di solito sono solo inserite o disinserite (Fuori casa = inserimento totale). Attiva In casa (parziale) e Notte (parziale istantaneo) solo se le usi sulla centrale."
+          "arm_modes": "Le aree Absoluta di solito sono solo inserite o disinserite (Fuori casa = inserimento totale). Attiva In casa (parziale) e Notte (parziale istantaneo) solo se le usi sulla centrale.",
+          "extra_zones": "Zone da mostrare anche se la centrale non le assegna all'utente, ad esempio zone campanello o tempo reale che non appartengono a nessuna area. Numeri di zona separati da virgole, intervalli ammessi (es. 15, 16 oppure 20-22). Per queste zone non vengono creati gli interruttori di esclusione."
         }
       }
     },
     "error": {
-      "no_arm_mode": "Seleziona almeno una modalità di inserimento."
+      "no_arm_mode": "Seleziona almeno una modalità di inserimento.",
+      "invalid_zone_list": "Inserisci numeri di zona da 1 a 128 separati da virgole (es. 15, 16 oppure 20-22)."
     }
   },
   "entity": {
