@@ -21,7 +21,6 @@ from homeassistant.helpers.device_registry import format_mac
 from .const import (
     ARM_MODES_ALL,
     CONF_ARM_MODES,
-    CONF_EXTRA_ZONES,
     CONF_PIN,
     CONF_POLL_INTERVAL,
     CONF_REQUIRE_CODE,
@@ -31,7 +30,6 @@ from .const import (
     DOMAIN,
     MAX_POLL_INTERVAL,
     MIN_POLL_INTERVAL,
-    parse_zone_list,
 )
 from .itv2.client import (
     AbsolutaClient,
@@ -189,12 +187,7 @@ class BentelOptionsFlow(OptionsFlow):
         if user_input is not None:
             if not user_input.get(CONF_ARM_MODES):
                 errors[CONF_ARM_MODES] = "no_arm_mode"
-            try:
-                zones = parse_zone_list(user_input.get(CONF_EXTRA_ZONES))
-            except ValueError:
-                errors[CONF_EXTRA_ZONES] = "invalid_zone_list"
             if not errors:
-                user_input[CONF_EXTRA_ZONES] = ", ".join(str(z) for z in zones)
                 return self.async_create_entry(data=user_input)
         schema = vol.Schema(
             {
@@ -218,7 +211,6 @@ class BentelOptionsFlow(OptionsFlow):
                     )
                 ),
                 vol.Required(CONF_REQUIRE_CODE, default=False): selector.BooleanSelector(),
-                vol.Optional(CONF_EXTRA_ZONES, default=""): selector.TextSelector(),
             }
         )
         return self.async_show_form(

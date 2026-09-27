@@ -17,13 +17,11 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import entity_registry as er
 
 from .const import (
-    CONF_EXTRA_ZONES,
     CONF_PIN,
     CONF_POLL_INTERVAL,
     DEFAULT_POLL_INTERVAL,
     DEFAULT_PORT,
     EVENT_BENTEL,
-    parse_zone_list,
 )
 from .itv2.client import AbsolutaClient, AuthenticationFailed, ITv2Error
 
@@ -40,16 +38,6 @@ PLATFORMS: list[Platform] = [
 type BentelConfigEntry = ConfigEntry[AbsolutaClient]
 
 
-def _extra_zones(entry: BentelConfigEntry) -> list[int]:
-    try:
-        return parse_zone_list(entry.options.get(CONF_EXTRA_ZONES))
-    except ValueError:
-        _LOGGER.warning(
-            "Ignoring invalid extra zones option: %s", entry.options.get(CONF_EXTRA_ZONES)
-        )
-        return []
-
-
 async def async_setup_entry(hass: HomeAssistant, entry: BentelConfigEntry) -> bool:
     """Connect to the panel and set up the platforms."""
     client = AbsolutaClient(
@@ -57,7 +45,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: BentelConfigEntry) -> bo
         entry.data[CONF_PIN],
         entry.data.get(CONF_PORT, DEFAULT_PORT),
         poll_interval=entry.options.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL),
-        extra_zones=_extra_zones(entry),
     )
     try:
         await client.start()

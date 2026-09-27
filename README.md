@@ -74,7 +74,6 @@ Available from the integration's **Configure** button:
 | Status polling interval | 5 s | The ABS-IP does not push zone open/closed changes, so zones are read at this interval. |
 | Arm modes | Away | Add *Home* (stay) and *Night* (instant stay) only if you use them on the panel. *Forced* arms even with open zones, which get bypassed; it appears in Home Assistant as "custom bypass". |
 | Require code | Off | Home Assistant asks for the PIN to arm/disarm. Arming mode buttons and zone bypass switches are not created. |
-| Additional zones | – | Zones to show even if the panel does not assign them to the user, e.g. chime or real-time zones that belong to no partition (`15, 16` or `20-22`). No bypass switch is created for them. |
 
 ## Entities
 
@@ -135,10 +134,9 @@ automation:
   (16 on an Absoluta 16). Zones configured above it (e.g. wireless zones 17–20) are not
   created because the ABS-IP does not return their status. Use slots within the limit for
   important sensors.
-- **Zones not assigned to the user**: the integration creates the zones the panel assigns
-  to the configured user. Zones in partitions the user cannot access, or special zones that
-  belong to no partition (e.g. chime, real-time), are missing: enable the user on that
-  partition in BOSS, or list them in the *Additional zones* option.
+- **Zones not assigned to the user**: only zones in the partitions the configured user is
+  enabled on are created. If a zone is missing, enable the user on that zone's partition in
+  BOSS and reload the integration (the panel does not report the real status of other zones).
 - **Outputs**: only outputs reserved to the user's partitions with a programmed action are
   available over ITv2.
 - ABS-IP **AES encryption** is not supported.
