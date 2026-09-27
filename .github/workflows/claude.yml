@@ -52,4 +52,4 @@ jobs:
           # (which low-tier API keys may not have access to)
           claude_args: |
             --model claude-sonnet-5
-            --max-turns 30
+            --max-turns 80
