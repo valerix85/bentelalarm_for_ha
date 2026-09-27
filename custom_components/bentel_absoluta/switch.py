@@ -26,10 +26,7 @@ async def async_setup_entry(
     # Bypassing a zone lowers protection: like the arming-mode buttons it cannot
     # ask for a code, so it is not offered when a code is required.
     if not entry.options.get(CONF_REQUIRE_CODE):
-        # only zones assigned to the user: bypassing other zones may be refused
-        entities += [
-            BentelZoneBypass(entry, z) for z in client.user_zones if z in client.assigned_zones
-        ]
+        entities += [BentelZoneBypass(entry, z) for z in client.user_zones]
     async_add_entities(entities)
 
 
