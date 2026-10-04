@@ -31,6 +31,7 @@ class FakePanel:
         max_zones_per_reply: int | None = None,
         zone_label_limit: int | None = None,
         close_on_logout: bool = True,
+        partial_arm_delay: float = 0.0,
     ) -> None:
         self.pin = pin
         self.zones = list(zones)
@@ -47,6 +48,9 @@ class FakePanel:
         self.panel_time: bytes | None = None
         # Real ABS-IP (fw 3.60.37) closes the TCP session after Exit Access Level
         self.close_on_logout = close_on_logout
+        # After a refused arm-all, delay before the ready partitions get armed
+        # (0.5 s to 4 s on a real Absoluta 16)
+        self.partial_arm_delay = partial_arm_delay
         self.connections = 0
         self.zone_raw = {z: 0 for z in self.zones}
         self.part_raw = {p: bytearray(b"\x02\x00\x00") for p in self.partitions}
@@ -213,16 +217,23 @@ class FakePanel:
             }
             ready = [t for t in targets if mode & 0x80 or t not in blocked]
             refused = len(ready) < len(targets)
-            for t in ready:
-                self.part_raw[t][0] = 0x01 | (0x04 if mode == 2 else 0x02)
+
+            def arm_ready() -> None:
+                for t in ready:
+                    self.part_raw[t][0] = 0x01 | (0x04 if mode == 2 else 0x02)
+                if ready:
+                    self._send(cmd_bytes(Cmd.ARMING_DISARMING) + bytes([0, mode, 1, 0]))
+                    self._send(self._partition_status())
+
             if refused:
                 self._respond(seq, 0x01)
                 self._send(cmd_bytes(Cmd.MISC_ALARM) + bytes.fromhex("00 FF 01"))
+                if self.partial_arm_delay:
+                    asyncio.get_running_loop().call_later(self.partial_arm_delay, arm_ready)
+                    return
             else:
                 self._respond(seq)
-            if ready:
-                self._send(cmd_bytes(Cmd.ARMING_DISARMING) + bytes([0, mode, 1, 0]))
-                self._send(self._partition_status())
+            arm_ready()
         elif cmd == Cmd.PARTITION_DISARM:
             seq, (part, _) = p[0], m.read_var(p, 1)
             self._respond(seq)

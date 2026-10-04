@@ -75,8 +75,9 @@ APP_TIMEOUT = 6.0
 KEEP_ALIVE_INTERVAL = 5.0
 LABEL_CHUNK = 8
 MAX_ZONE_RUN = 64
-# After a refused "arm all partitions", time for the panel to arm the ready ones
-ARM_SETTLE_TIME = 1.5
+# After a refused "arm all partitions", max time for the panel to arm the ready
+# ones (seen up to ~4 s on an Absoluta 16)
+ARM_SETTLE_TIME = 6.0
 EVENTS_INTERVAL = 30.0
 EVENTS_READ = 5
 
@@ -1147,13 +1148,14 @@ class AbsolutaClient:
         answered with 0502 0x01, but the panel still arms the ready ones (seen on
         an Absoluta 16 fw 3.60.37): in that case PartiallyArmed is raised.
         """
+        armed_before = set(self._armed_partitions())
         try:
             await self._request(Cmd.PARTITION_ARM, msg.build_arm(partition, int(mode)))
         except CommandFailed as err:
             if partition or err.is_command_error or err.code not in (0x01, 0x04):
                 raise
-            armed = await self._armed_after_refusal()
-            if not armed:
+            armed = await self._armed_after_refusal(armed_before)
+            if not set(armed) - armed_before:
                 raise
             self._notify()
             raise PartiallyArmed(
@@ -1165,18 +1167,33 @@ class AbsolutaClient:
         self._notify()
         self.request_refresh()
 
-    async def _armed_after_refusal(self) -> list[int]:
-        """Partitions armed (or in exit delay) shortly after a refused arm-all."""
-        await asyncio.sleep(ARM_SETTLE_TIME)
-        with contextlib.suppress(ITv2Error, TimeoutError):
-            await self._request_status(
-                Cmd.PARTITION_STATUS, msg.build_partition_status_request(self.user_partitions)
-            )
+    def _armed_partitions(self) -> list[int]:
         return [
             p
             for p in self.user_partitions
             if p in self.exit_delay or (p in self.partitions and self.partitions[p].armed)
         ]
+
+    async def _armed_after_refusal(self, armed_before: set[int]) -> list[int]:
+        """Partitions armed (or in exit delay) after a refused arm-all.
+
+        The panel arms the ready partitions some time after the 0502: 0.5 s
+        to 4 s on an Absoluta 16 (fw 3.60.37). Wait for the exit-delay (0230) /
+        status (0812) notifications, then read the final status once.
+        """
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + ARM_SETTLE_TIME
+        while not set(self._armed_partitions()) - armed_before:
+            if loop.time() >= deadline:
+                break
+            await asyncio.sleep(0.25)
+        else:
+            await asyncio.sleep(1.0)  # the 0230 of the other partitions follow
+        with contextlib.suppress(ITv2Error, TimeoutError):
+            await self._request_status(
+                Cmd.PARTITION_STATUS, msg.build_partition_status_request(self.user_partitions)
+            )
+        return self._armed_partitions()
 
     async def disarm(self, partition: int) -> None:
         await self._request(Cmd.PARTITION_DISARM, msg.build_disarm(partition))

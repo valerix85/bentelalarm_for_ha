@@ -210,6 +210,8 @@ async def test_arm_refused_open_zone(hass: HomeAssistant, panel: FakePanel) -> N
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     panel.zone_raw[3] = 0x01  # a window left open
+    # the real panel arms the ready partitions up to ~4 s after refusing
+    panel.partial_arm_delay = 3.0
     await asyncio.sleep(2.5)
     with pytest.raises(HomeAssistantError) as exc:
         await hass.services.async_call(
