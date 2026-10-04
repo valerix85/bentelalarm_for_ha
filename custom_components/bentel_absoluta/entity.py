@@ -27,6 +27,7 @@ class BentelEntity(Entity):
             model=info.model,
             name=f"Bentel {info.model}",
             sw_version=info.firmware,
+            hw_version=f"ABS-IP {info.abs_ip_version}" if info.abs_ip_version else None,
             configuration_url=None,
         )
 

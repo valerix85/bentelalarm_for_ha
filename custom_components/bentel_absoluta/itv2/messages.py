@@ -244,6 +244,8 @@ class PanelInfo:
     product_id: int | None = None
     protocol: str | None = None
     identifier: str | None = None  # ABS-IP MAC address
+    # ABS-IP plug-in firmware: "software version" of the panel's Open Session (060A)
+    abs_ip_version: str | None = None
     max_zones: int | None = None
     max_partitions: int | None = None
     max_outputs: int | None = None

@@ -24,6 +24,7 @@ async def async_get_config_entry_diagnostics(
             "model": info.model,
             "product_id": info.product_id,
             "firmware": info.firmware,
+            "abs_ip_version": info.abs_ip_version,
             "protocol": info.protocol,
             "max_zones": info.max_zones,
             "max_partitions": info.max_partitions,

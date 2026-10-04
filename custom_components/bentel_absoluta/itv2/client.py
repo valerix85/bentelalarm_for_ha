@@ -116,6 +116,13 @@ class CommandFailed(ITv2Error):
         super().__init__(f"command 0x{command:04X} failed: {kind} 0x{code:02X} ({text})")
 
 
+def _loggable(app: bytes) -> str:
+    """Hex dump for the debug log, with the user code of the login (0400) masked."""
+    if app[:2] == Cmd.ENTER_ACCESS_LEVEL.to_bytes(2, "big"):
+        return app[:3].hex(" ") + " <code redacted>"
+    return app.hex(" ")
+
+
 def _next(n: int) -> int:
     """Sequence numbers roll over from 255 to 1 (0 is reserved for resync)."""
     return n + 1 if n < 255 else 1
@@ -465,7 +472,7 @@ class AbsolutaClient:
         if self._writer is None or self._closed_event.is_set():
             raise ConnectionFailed("not connected")
         data = encode_packet(packet)
-        _LOGGER.debug("TX seq=%d rseq=%d %s", packet.seq, packet.rseq, packet.app.hex(" "))
+        _LOGGER.debug("TX seq=%d rseq=%d %s", packet.seq, packet.rseq, _loggable(packet.app))
         self._writer.write(data)
 
     def _send_simple_ack(self) -> None:
@@ -698,6 +705,10 @@ class AbsolutaClient:
             self.info.max_users = caps.get("users")
         elif cmd == Cmd.SOFTWARE_VERSION:
             msg.parse_software_version(p, self.info)
+        elif cmd == Cmd.OPEN_SESSION:
+            # device type(1) device id(2) software version(2) protocol(2) ...
+            if len(p) >= 5:
+                self.info.abs_ip_version = f"{p[3]:02X} {p[4]:02X}"
         elif cmd == Cmd.REQUEST_ACCESS:
             ident, off = p[0], 1
             self.info.identifier = ":".join(f"{b:02X}" for b in p[off : off + ident])

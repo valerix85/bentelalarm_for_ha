@@ -148,7 +148,7 @@ automation:
 2. Download the **diagnostics**: device page → ⋮ → *Download diagnostics* (the PIN is redacted).
 3. For a detailed log: *Settings → Devices & services → Bentel Absoluta → ⋮ → Enable debug
    logging*, reproduce the problem, then disable it to download the log (every packet is
-   logged in hex).
+   logged in hex; the user code in the login frame is redacted).
 4. [Open an issue](https://github.com/valerix85/bentelalarm_for_ha/issues/new/choose)
    attaching both files.
 

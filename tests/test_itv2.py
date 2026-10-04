@@ -115,6 +115,7 @@ async def test_full_session():
     try:
         assert client.connected
         assert client.info.identifier == "00:03:4F:06:00:03"
+        assert client.info.abs_ip_version == "01 00"
         assert client.info.model == "Absoluta 42"
         assert client.user_partitions == [1, 2]
         assert client.user_zones == [1, 2, 3, 5]
@@ -353,6 +354,21 @@ async def test_bypass_event_not_hidden_by_own_relogin():
         assert client.last_events[0].text() == "Esclusa zone"
         assert client.last_events[0].zone == 3
         assert [d["text"] for d in logged] == ["Esclusa zone"]  # login not notified
+    finally:
+        await client.stop()
+        await panel.stop()
+
+
+@pytest.mark.asyncio
+async def test_debug_log_redacts_access_code(caplog):
+    caplog.set_level("DEBUG", logger="custom_components.bentel_absoluta")
+    panel = FakePanel(pin="4711")
+    client = await _started(panel, pin="4711")
+    try:
+        tx = [r.getMessage() for r in caplog.records if r.getMessage().startswith("TX")]
+        login = [line for line in tx if line.split(" ", 3)[3].startswith("04 00")]
+        assert login and all("<code redacted>" in line for line in login)
+        assert not any("47 11" in line for line in tx)
     finally:
         await client.stop()
         await panel.stop()
