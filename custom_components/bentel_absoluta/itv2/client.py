@@ -75,6 +75,8 @@ APP_TIMEOUT = 6.0
 KEEP_ALIVE_INTERVAL = 5.0
 LABEL_CHUNK = 8
 MAX_ZONE_RUN = 64
+# After a refused "arm all partitions", time for the panel to arm the ready ones
+ARM_SETTLE_TIME = 1.5
 EVENTS_INTERVAL = 30.0
 EVENTS_READ = 5
 
@@ -114,6 +116,15 @@ class CommandFailed(ITv2Error):
         text = table.get(code, f"error 0x{code:02X}")
         kind = "command error" if is_command_error else "response"
         super().__init__(f"command 0x{command:04X} failed: {kind} 0x{code:02X} ({text})")
+
+
+class PartiallyArmed(ITv2Error):
+    """Arming all partitions was refused, but the panel armed the ready ones."""
+
+    def __init__(self, armed: list[int], not_armed: list[int]) -> None:
+        super().__init__(f"partitions {armed} armed, {not_armed} not armed")
+        self.armed = armed
+        self.not_armed = not_armed
 
 
 def _loggable(app: bytes) -> str:
@@ -1130,13 +1141,42 @@ class AbsolutaClient:
         return list(self.user_partitions) if not partition else [partition]
 
     async def arm(self, partition: int, mode: int = ArmMode.AWAY) -> None:
-        """Arm a partition (0 = all partitions of the logged user)."""
-        await self._request(Cmd.PARTITION_ARM, msg.build_arm(partition, int(mode)))
+        """Arm a partition (0 = all partitions of the logged user).
+
+        Arming all partitions with some of them not ready (e.g. a zone open) is
+        answered with 0502 0x01, but the panel still arms the ready ones (seen on
+        an Absoluta 16 fw 3.60.37): in that case PartiallyArmed is raised.
+        """
+        try:
+            await self._request(Cmd.PARTITION_ARM, msg.build_arm(partition, int(mode)))
+        except CommandFailed as err:
+            if partition or err.is_command_error or err.code not in (0x01, 0x04):
+                raise
+            armed = await self._armed_after_refusal()
+            if not armed:
+                raise
+            self._notify()
+            raise PartiallyArmed(
+                armed, [p for p in self.user_partitions if p not in armed]
+            ) from err
         # The panel accepted the command: show the exit delay right away,
         # the real status follows with the 0812 notification / next poll.
         self.arming_requested.update(self._targets(partition))
         self._notify()
         self.request_refresh()
+
+    async def _armed_after_refusal(self) -> list[int]:
+        """Partitions armed (or in exit delay) shortly after a refused arm-all."""
+        await asyncio.sleep(ARM_SETTLE_TIME)
+        with contextlib.suppress(ITv2Error, TimeoutError):
+            await self._request_status(
+                Cmd.PARTITION_STATUS, msg.build_partition_status_request(self.user_partitions)
+            )
+        return [
+            p
+            for p in self.user_partitions
+            if p in self.exit_delay or (p in self.partitions and self.partitions[p].armed)
+        ]
 
     async def disarm(self, partition: int) -> None:
         await self._request(Cmd.PARTITION_DISARM, msg.build_disarm(partition))

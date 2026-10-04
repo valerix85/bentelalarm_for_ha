@@ -218,6 +218,28 @@ async def test_arm_refused_open_zone(hass: HomeAssistant, panel: FakePanel) -> N
             {"entity_id": "alarm_control_panel.bentel_absoluta_42_all_partitions"},
             blocking=True,
         )
+    # zone 3 is in partition 1: the panel still arms partition 2 (0502 0x01)
+    assert exc.value.translation_key == "arm_partial_open_zones"
+    assert exc.value.translation_placeholders == {
+        "armed": "Area 03",
+        "not_armed": "Area 02",
+        "zones": "Zona 03",
+    }
+    await hass.async_block_till_done()
+    assert hass.states.get("alarm_control_panel.bentel_absoluta_42_area_02").state == "disarmed"
+    assert hass.states.get("alarm_control_panel.bentel_absoluta_42_area_03").state in (
+        "arming",
+        "armed_away",
+    )
+
+    # a single partition with an open zone is refused as a whole
+    with pytest.raises(HomeAssistantError) as exc:
+        await hass.services.async_call(
+            "alarm_control_panel",
+            "alarm_arm_away",
+            {"entity_id": "alarm_control_panel.bentel_absoluta_42_area_02"},
+            blocking=True,
+        )
     assert exc.value.translation_key == "arm_failed_open_zones"
     assert exc.value.translation_placeholders == {"zones": "Zona 03"}
     assert hass.states.get("alarm_control_panel.bentel_absoluta_42_area_02").state == "disarmed"

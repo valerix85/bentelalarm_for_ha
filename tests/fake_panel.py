@@ -203,15 +203,26 @@ class FakePanel:
             seq, (part, off) = p[0], m.read_var(p, 1)
             mode = p[off]
             targets = self.partitions if not part else [part]
-            if not mode & 0x80 and any(self.zone_raw[z] & 1 for z in self.zones):
+            # A partition with an open zone is not armed (unless forced). Like a
+            # real Absoluta 16 (fw 3.60.37), arming "all partitions" still arms
+            # the ready ones and answers 0502 0x01 if any could not be armed.
+            blocked = {
+                self.zone_partition(z)
+                for z in self.zones
+                if self.zone_raw[z] & 1 and not self.zone_raw[z] & 0x80
+            }
+            ready = [t for t in targets if mode & 0x80 or t not in blocked]
+            refused = len(ready) < len(targets)
+            for t in ready:
+                self.part_raw[t][0] = 0x01 | (0x04 if mode == 2 else 0x02)
+            if refused:
                 self._respond(seq, 0x01)
                 self._send(cmd_bytes(Cmd.MISC_ALARM) + bytes.fromhex("00 FF 01"))
-                return
-            self._respond(seq)
-            for t in targets:
-                self.part_raw[t][0] = 0x01 | (0x04 if mode == 2 else 0x02)
-            self._send(cmd_bytes(Cmd.ARMING_DISARMING) + bytes([0, mode, 1, 0]))
-            self._send(self._partition_status())
+            else:
+                self._respond(seq)
+            if ready:
+                self._send(cmd_bytes(Cmd.ARMING_DISARMING) + bytes([0, mode, 1, 0]))
+                self._send(self._partition_status())
         elif cmd == Cmd.PARTITION_DISARM:
             seq, (part, _) = p[0], m.read_var(p, 1)
             self._respond(seq)

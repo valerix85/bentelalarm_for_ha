@@ -29,7 +29,7 @@ from .const import (
     DOMAIN,
 )
 from .entity import BentelEntity
-from .itv2.client import CommandFailed, ITv2Error
+from .itv2.client import CommandFailed, ITv2Error, PartiallyArmed
 from .itv2.const import ArmMode, Cmd
 
 
@@ -162,6 +162,21 @@ class BentelPartition(BentelEntity, AlarmControlPanelEntity):
                 translation_domain=DOMAIN,
                 translation_key="command_failed",
                 translation_placeholders={"error": str(err)},
+            ) from err
+        except PartiallyArmed as err:
+            name = self.client.partition_labels.get
+            open_zones = [
+                self.client.zone_labels.get(z, str(z))
+                for z in sorted({z for p in err.not_armed for z in self.client.open_zones(p)})
+            ]
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="arm_partial_open_zones" if open_zones else "arm_partial",
+                translation_placeholders={
+                    "armed": ", ".join(name(p, str(p)) for p in err.armed),
+                    "not_armed": ", ".join(name(p, str(p)) for p in err.not_armed),
+                    "zones": ", ".join(open_zones),
+                },
             ) from err
         except ITv2Error as err:
             raise HomeAssistantError(

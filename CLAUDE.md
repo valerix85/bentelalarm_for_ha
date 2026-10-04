@@ -56,6 +56,10 @@ The repository is English-only (code, comments, docs); Italian is used only in
   enabling the ITv2 user on that partition in BOSS.
 - Zones per partition: 0800 -> 0770 with partition != 0 (fw >= 3.50.80). If unanswered the
   global list is used.
+- Arm all partitions (0900 with partition 0) when some are not ready (verified Absoluta 16
+  fw 3.60.37): the answer is only 0502 0x01 (no zone detail), but the panel still arms the
+  ready partitions (0230 exit delay + 0812). The client re-reads 0812 and raises
+  PartiallyArmed with the armed / not armed partitions.
 - Panel clock: 0741 with ITv2 date/time in local time.
 - Every integration login (including the reconnect after a bypass) is logged by the panel as
   "Riconosciuto Cod" (class 0, code 0x15): the client recognises it (one per login, the most

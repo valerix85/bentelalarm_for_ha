@@ -126,8 +126,9 @@ automation:
 - **Zone bypass** is applied by the panel when the session ends, so the integration
   reconnects right after it: each bypass takes a few seconds.
 - **Arming refused**: if a zone is open or something blocks arming, Home Assistant shows an
-  error with the open zones and the state does not change. With *All partitions*, some
-  partitions may arm and others not.
+  error with the open zones and the state does not change. With *All partitions* the panel
+  still arms the partitions that are ready: Home Assistant then tells which partitions were
+  armed and which were not (with their open zones).
 
 ## Known limitations
 
