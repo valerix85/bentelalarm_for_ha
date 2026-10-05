@@ -137,7 +137,12 @@ automation:
 - **Zones above the model limit**: the panel reports a maximum number of zones over ITv2
   (16 on an Absoluta 16). Zones configured above it (e.g. wireless zones 17–20) are not
   created because the ABS-IP does not return their status. Use slots within the limit for
-  important sensors.
+  important sensors. Their alarm and tamper events still appear in the event log
+  (*Last event* sensor and `bentel_absoluta_event`).
+- **No more firmware updates**: Bentel / Johnson Controls has declared the Absoluta 16, 42
+  and 104 panels obsolete (official support and firmware development have ended, October
+  2026), so the ITv2 limits of these models will not change. The Absoluta Plus is the
+  current, supported model.
 - **Zones not assigned to the user**: only zones in the partitions the configured user is
   enabled on are created. If a zone is missing, enable the user on that zone's partition in
   BOSS and reload the integration (the panel does not report the real status of other zones).

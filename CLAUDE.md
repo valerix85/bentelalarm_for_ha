@@ -42,7 +42,8 @@ The repository is English-only (code, comments, docs); Italian is used only in
   independent and on refusal it is retried item by item.
 - Zone status beyond max_zones (0613): on Absoluta 16 fw 3.60.37 a 0811 request for zone 17
   (or 18, 20) is answered with zones 1..16 anyway. Status of zones >16 is NOT available
-  over ITv2 (labels are). This is not a client bug.
+  over ITv2 (labels are). This is not a client bug. Bentel/JCI support (Oct 2026): Absoluta
+  16/42/104 are obsolete, no more support or firmware, so this will not be fixed upstream.
 - Event log 0101/4101: 13-byte records = timestamp(4) flags(1) event id(2: class<<12 |
   restore<<11 | code) index(2: where, who) partition mask(4, only the last 2 bytes matter).
   Verified against the guide's examples. In zone events WHO is the 0-based zone index
