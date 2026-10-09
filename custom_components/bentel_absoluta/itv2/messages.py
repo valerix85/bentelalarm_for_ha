@@ -436,7 +436,9 @@ def build_command_request(cmd: int, data: bytes = b"") -> bytes:
 
 
 def build_partition_status_request(partitions: list[int]) -> bytes:
-    mask = list_to_bitmask(partitions)
+    # Absoluta has up to 16 partitions: the mask is always 2 bytes (ITv2 Usage
+    # Guide). An Absoluta 42 (fw 3.60.28) never answers a 1-byte mask.
+    mask = list_to_bitmask(partitions, max(2, (max(partitions, default=0) + 7) // 8))
     return bytes([len(mask)]) + mask
 
 

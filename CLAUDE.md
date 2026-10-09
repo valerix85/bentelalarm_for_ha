@@ -65,7 +65,10 @@ The repository is English-only (code, comments, docs); Italian is used only in
 - Every integration login (including the reconnect after a bypass) is logged by the panel as
   "Riconosciuto Cod" (class 0, code 0x15): the client recognises it (one per login, the most
   recent) and neither shows nor fires it, otherwise it would hide the interesting event.
-- Two ITv2 clients on the same ABS-IP (observed in issue #9, Absoluta 42 fw 3.60.28, two HA
-  config entries for one panel): the second session completes the handshake and login, but
-  0800-wrapped reads answer 0x18 or nothing, keep-alives get no 0502, and it drops every ~30 s.
-  The config flow aborts on an already configured host before connecting.
+- Partition Status request (0800 -> 0812): always send a 2-byte partition mask (the Usage Guide
+  says Absoluta has 16 partitions, mask length always 0x02). An Absoluta 42 fw 3.60.28 with ABS-IP
+  02.00 (issue #9) never answered `08 12 01 1f` (transport ACK only, no reply), so every poll
+  timed out and the session was dropped every ~30 s (Absoluta 16 fw 3.60.37 also answers 1 byte).
+  On the same panel the per-partition 0770 request answers 0x18 (the global list is used).
+- One config entry per ABS-IP host: the config flow aborts on an already configured host before
+  connecting (the ABS-IP accepts a single ITv2 session).
