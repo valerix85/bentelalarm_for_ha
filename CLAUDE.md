@@ -65,3 +65,7 @@ The repository is English-only (code, comments, docs); Italian is used only in
 - Every integration login (including the reconnect after a bypass) is logged by the panel as
   "Riconosciuto Cod" (class 0, code 0x15): the client recognises it (one per login, the most
   recent) and neither shows nor fires it, otherwise it would hide the interesting event.
+- Two ITv2 clients on the same ABS-IP (observed in issue #9, Absoluta 42 fw 3.60.28, two HA
+  config entries for one panel): the second session completes the handshake and login, but
+  0800-wrapped reads answer 0x18 or nothing, keep-alives get no 0502, and it drops every ~30 s.
+  The config flow aborts on an already configured host before connecting.

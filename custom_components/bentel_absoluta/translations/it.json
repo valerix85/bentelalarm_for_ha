@@ -39,7 +39,7 @@
       "handshake_failed": "L'ABS-IP ha accettato la connessione TCP ma la sessione ITv2 non è partita. Verifica che ITv2 sia abilitato con cifratura disattivata e che nessun altro client ITv2 (BOSS, app, altro bridge) sia collegato. Dettaglio: {error_detail}"
     },
     "abort": {
-      "already_configured": "Questa centrale è già configurata.",
+      "already_configured": "Questa centrale è già configurata. L'ABS-IP accetta una sola connessione: per usare il PIN di un altro utente riconfigura la voce esistente invece di aggiungerne una nuova.",
       "reauth_successful": "PIN aggiornato.",
       "reconfigure_successful": "Configurazione aggiornata."
     }

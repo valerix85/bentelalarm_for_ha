@@ -71,6 +71,23 @@ async def test_config_flow(hass: HomeAssistant, panel: FakePanel) -> None:
     await hass.config_entries.async_unload(result["result"].entry_id)
 
 
+async def test_config_flow_same_host_aborts(hass: HomeAssistant) -> None:
+    """A second entry for the same ABS-IP is refused before connecting."""
+    MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="192.168.1.150",
+        data={CONF_HOST: "192.168.1.150", CONF_PORT: 3064, CONF_PIN: "1234"},
+    ).add_to_hass(hass)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_HOST: "192.168.1.150", CONF_PORT: 3064, CONF_PIN: "5678"}
+    )
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+
+
 async def test_setup_and_control(hass: HomeAssistant, panel: FakePanel) -> None:
     entry = MockConfigEntry(
         domain=DOMAIN,

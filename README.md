@@ -119,7 +119,9 @@ automation:
 
 ## Good to know
 
-- The ABS-IP accepts **only one ITv2 connection** at a time.
+- The ABS-IP accepts **only one ITv2 connection** at a time: configure each panel **once**
+  in Home Assistant. To switch to another user's PIN use *Reconfigure* on the existing entry;
+  two entries for the same panel keep disconnecting each other.
 - ITv2 has the **lowest priority**: when BOSS or the Bentel mobile app connects, the panel
   closes the Home Assistant session. The integration reconnects by itself (retrying from 10 s
   up to every 5 min).
@@ -145,7 +147,8 @@ automation:
 
 ## Troubleshooting
 
-1. Check the **Connection** sensor and that BOSS or the mobile app are not connected.
+1. Check the **Connection** sensor and that BOSS, the mobile app or other ITv2 clients (old
+   bridges/add-ons, a second Home Assistant entry or instance for the same panel) are not connected.
 2. Download the **diagnostics**: device page → ⋮ → *Download diagnostics* (the PIN is redacted).
 3. For a detailed log: *Settings → Devices & services → Bentel Absoluta → ⋮ → Enable debug
    logging*, reproduce the problem, then disable it to download the log (every packet is

@@ -39,7 +39,7 @@
       "handshake_failed": "The ABS-IP accepted the TCP connection but the ITv2 session did not start. Check that ITv2 is enabled with encryption disabled and that no other ITv2 client (BOSS, app, another bridge) is connected. Detail: {error_detail}"
     },
     "abort": {
-      "already_configured": "This panel is already configured.",
+      "already_configured": "This panel is already configured. The ABS-IP accepts a single connection: to use another user's PIN, reconfigure the existing entry instead of adding a new one.",
       "reauth_successful": "PIN updated.",
       "reconfigure_successful": "Configuration updated."
     }

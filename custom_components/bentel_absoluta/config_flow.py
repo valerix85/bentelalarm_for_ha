@@ -111,6 +111,10 @@ class BentelConfigFlow(ConfigFlow, domain=DOMAIN):
             host = user_input[CONF_HOST].strip()
             port = user_input[CONF_PORT]
             pin = str(user_input[CONF_PIN]).strip()
+            # The ABS-IP accepts a single ITv2 session: a second entry for the same
+            # panel (e.g. with another user's PIN) would make the two sessions kick
+            # each other out. Abort before connecting, so the running one is untouched.
+            self._async_abort_entries_match({CONF_HOST: host})
             client = await self._try(host, port, pin, errors)
             if client is not None:
                 unique = format_mac(client.info.identifier) if client.info.identifier else host
