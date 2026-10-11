@@ -33,6 +33,9 @@ class FakePanel:
         close_on_logout: bool = True,
         partial_arm_delay: float = 0.0,
     ) -> None:
+        # Next N connections: answer the client's 060A, then end the session
+        # (seen on a real ABS-IP right after a lost connection)
+        self.end_session_on_open = 0
         self.pin = pin
         self.zones = list(zones)
         self.partitions = list(partitions)
@@ -146,6 +149,10 @@ class FakePanel:
             return
         if cmd == Cmd.OPEN_SESSION:
             self._respond(p[0])
+            if self.end_session_on_open:
+                self.end_session_on_open -= 1
+                self._send(cmd_bytes(Cmd.END_SESSION))
+                return
             self._send(
                 cmd_bytes(Cmd.OPEN_SESSION)
                 + bytes([self._next_app()])

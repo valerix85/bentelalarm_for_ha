@@ -220,6 +220,31 @@ async def test_reconnect_after_panel_drop(monkeypatch):
         await panel.stop()
 
 
+@pytest.mark.asyncio
+async def test_reconnect_survives_session_end_during_handshake(monkeypatch):
+    """The panel ends the session while the client waits for its 060A:
+    the supervisor must keep retrying instead of dying silently."""
+    panel = FakePanel()
+    client = await _started(panel, load_labels=False)
+    try:
+        import itv2.client as c
+
+        orig_sleep = asyncio.sleep
+        monkeypatch.setattr(c.asyncio, "sleep", lambda s: orig_sleep(min(s, 0.05)))
+        panel.end_session_on_open = 2
+        panel.writer.close()
+        for _ in range(200):
+            await orig_sleep(0.05)
+            if client.connected and panel.connections >= 4:
+                break
+        assert panel.connections >= 4
+        assert client.connected
+        assert client._supervisor is not None and not client._supervisor.done()
+    finally:
+        await client.stop()
+        await panel.stop()
+
+
 def test_labels_total_length_and_per_label_length():
     names = [f"Label {i}".ljust(16).encode() for i in range(1, 9)]
     data = b"".join(names)

@@ -82,6 +82,12 @@ EVENTS_INTERVAL = 30.0
 EVENTS_READ = 5
 
 
+def _being_cancelled() -> bool:
+    """True when the running task itself is being cancelled (e.g. on unload)."""
+    task = asyncio.current_task()
+    return task is not None and task.cancelling() > 0
+
+
 class ITv2Error(Exception):
     """Base error."""
 
@@ -404,7 +410,11 @@ class AbsolutaClient:
             self._pending.future.set_exception(err)
         for futures in self._expected.values():
             for fut in futures:
-                fut.cancel()
+                # Not cancel(): a cancelled future raises CancelledError in the
+                # awaiting code, which would silently end the supervisor task.
+                if not fut.done():
+                    fut.set_exception(err)
+                    fut.exception()  # mark as retrieved: some are never awaited
         self._expected.clear()
         self._ack_event.set()
 
@@ -422,7 +432,9 @@ class AbsolutaClient:
                 try:
                     await self._poll_loop()
                 except asyncio.CancelledError:
-                    raise
+                    if self._stopping or _being_cancelled():
+                        raise
+                    _LOGGER.warning("Connection to Absoluta %s lost (interrupted)", self.host)
                 except Exception as err:  # noqa: BLE001
                     planned = self._reconnect_now
                     if planned:
@@ -451,6 +463,19 @@ class AbsolutaClient:
             except ITv2Error as err:
                 self._set_connected(False)
                 _LOGGER.debug("Reconnect failed: %s", err)
+                backoff = min(backoff * 2, 300.0)
+            except asyncio.CancelledError:
+                if self._stopping or _being_cancelled():
+                    raise
+                # A stray cancellation must never end the supervisor
+                await self._close_transport()
+                self._set_connected(False)
+                _LOGGER.debug("Reconnect to %s interrupted, retrying", self.host)
+                backoff = min(backoff * 2, 300.0)
+            except Exception:  # noqa: BLE001
+                await self._close_transport()
+                self._set_connected(False)
+                _LOGGER.exception("Unexpected error reconnecting to Absoluta %s", self.host)
                 backoff = min(backoff * 2, 300.0)
 
     async def _poll_loop(self) -> None:
