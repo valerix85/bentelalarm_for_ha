@@ -245,6 +245,27 @@ async def test_reconnect_survives_session_end_during_handshake(monkeypatch):
         await panel.stop()
 
 
+@pytest.mark.asyncio
+async def test_reconnect_failure_is_logged(monkeypatch, caplog):
+    """A failed reconnection is visible without debug logging."""
+    panel = FakePanel()
+    client = await _started(panel, load_labels=False)
+    try:
+        import itv2.client as c
+
+        orig_sleep = asyncio.sleep
+        monkeypatch.setattr(c.asyncio, "sleep", lambda s: orig_sleep(min(s, 0.05)))
+        await panel.stop()  # ABS-IP unreachable: TCP connection refused
+        for _ in range(100):
+            await orig_sleep(0.05)
+            if "Cannot reconnect to Absoluta" in caplog.text:
+                break
+        assert "Cannot reconnect to Absoluta" in caplog.text
+        assert not client.connected
+    finally:
+        await client.stop()
+
+
 def test_labels_total_length_and_per_label_length():
     names = [f"Label {i}".ljust(16).encode() for i in range(1, 9)]
     data = b"".join(names)

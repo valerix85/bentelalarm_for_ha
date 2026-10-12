@@ -79,6 +79,7 @@ MAX_ZONE_RUN = 64
 # ones (seen up to ~4 s on an Absoluta 16)
 ARM_SETTLE_TIME = 6.0
 EVENTS_INTERVAL = 30.0
+MAX_RECONNECT_DELAY = 60.0
 EVENTS_READ = 5
 
 
@@ -399,7 +400,8 @@ class AbsolutaClient:
         if self._writer is not None:
             self._writer.close()
             with contextlib.suppress(Exception):
-                await self._writer.wait_closed()
+                # Bounded: an unresponsive peer must not stall the reconnection
+                await asyncio.wait_for(self._writer.wait_closed(), 5)
         self._writer = None
         self._reader = None
         self._closed_event.set()
@@ -426,6 +428,7 @@ class AbsolutaClient:
     async def _supervise(self) -> None:
         """Poll while connected, reconnect with back-off when the link drops."""
         backoff = 10.0
+        failures = 0
         while not self._stopping:
             planned = False
             if self.connected:
@@ -445,6 +448,7 @@ class AbsolutaClient:
                 if not planned:
                     self._set_connected(False)
                 backoff = 10.0
+                failures = 0
             if self._stopping:
                 break
             delay = 0.5 if planned else backoff
@@ -453,7 +457,13 @@ class AbsolutaClient:
             await asyncio.sleep(delay)
             try:
                 await self.connect()
-                _LOGGER.info("Reconnected to Absoluta %s", self.host)
+                if failures:
+                    _LOGGER.warning(
+                        "Reconnected to Absoluta %s after %d failed attempts", self.host, failures
+                    )
+                else:
+                    _LOGGER.info("Reconnected to Absoluta %s", self.host)
+                failures = 0
             except AuthenticationFailed:
                 self._set_connected(False)
                 _LOGGER.error("Absoluta %s rejected the user PIN, giving up", self.host)
@@ -462,21 +472,37 @@ class AbsolutaClient:
                 return
             except ITv2Error as err:
                 self._set_connected(False)
-                _LOGGER.debug("Reconnect failed: %s", err)
-                backoff = min(backoff * 2, 300.0)
+                failures += 1
+                self._log_reconnect_failure(failures, err)
+                backoff = min(backoff * 2, MAX_RECONNECT_DELAY)
             except asyncio.CancelledError:
                 if self._stopping or _being_cancelled():
                     raise
                 # A stray cancellation must never end the supervisor
                 await self._close_transport()
                 self._set_connected(False)
-                _LOGGER.debug("Reconnect to %s interrupted, retrying", self.host)
-                backoff = min(backoff * 2, 300.0)
+                failures += 1
+                self._log_reconnect_failure(failures, "interrupted")
+                backoff = min(backoff * 2, MAX_RECONNECT_DELAY)
             except Exception:  # noqa: BLE001
                 await self._close_transport()
                 self._set_connected(False)
+                failures += 1
                 _LOGGER.exception("Unexpected error reconnecting to Absoluta %s", self.host)
-                backoff = min(backoff * 2, 300.0)
+                backoff = min(backoff * 2, MAX_RECONNECT_DELAY)
+
+    def _log_reconnect_failure(self, failures: int, err: object) -> None:
+        # Visible without debug logging: the first failure and then about every 30 min
+        if failures == 1 or failures % 30 == 0:
+            _LOGGER.warning(
+                "Cannot reconnect to Absoluta %s (attempt %d): %s; retrying every %d s at most",
+                self.host,
+                failures,
+                str(err) or type(err).__name__,
+                int(MAX_RECONNECT_DELAY),
+            )
+        else:
+            _LOGGER.debug("Reconnect attempt %d failed: %s", failures, err)
 
     async def _poll_loop(self) -> None:
         last_poll = time.monotonic()

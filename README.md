@@ -124,7 +124,7 @@ automation:
   two entries for the same panel keep disconnecting each other.
 - ITv2 has the **lowest priority**: when BOSS or the Bentel mobile app connects, the panel
   closes the Home Assistant session. The integration reconnects by itself (retrying from 10 s
-  up to every 5 min).
+  up to every minute).
 - **Zone bypass** is applied by the panel when the session ends, so the integration
   reconnects right after it: each bypass takes a few seconds.
 - **Arming refused**: if a zone is open or something blocks arming, Home Assistant shows an
