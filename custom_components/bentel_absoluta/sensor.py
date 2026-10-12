@@ -28,6 +28,7 @@ class BentelLastEvent(BentelEntity, SensorEntity):
     def __init__(self, entry: BentelConfigEntry, italian: bool) -> None:
         super().__init__(entry, "last_event")
         self._italian = italian
+        self._last_documented = None
 
     def _describe(self, event) -> str:
         text = event.text(self._italian)
@@ -38,9 +39,15 @@ class BentelLastEvent(BentelEntity, SensorEntity):
         return text[:255]
 
     def _latest(self):
-        """Most recent documented event (undocumented codes are skipped)."""
+        """Most recent documented event. Undocumented codes are skipped, also when
+        they fill the whole window of recent records: the previous documented
+        event is kept instead (only shown as a last resort)."""
         events = self.client.last_events
-        return next((e for e in events if e.documented), events[0] if events else None)
+        latest = next((e for e in events if e.documented), None)
+        if latest is not None:
+            self._last_documented = latest
+            return latest
+        return self._last_documented or (events[0] if events else None)
 
     @property
     def native_value(self) -> str | None:
