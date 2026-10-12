@@ -323,7 +323,7 @@ class AbsolutaClient:
             )
         except (TimeoutError, OSError) as err:
             raise TcpConnectFailed(
-                f"TCP connection to {self.host}:{self.port} failed: {err or 'timeout'}"
+                f"TCP connection to {self.host}:{self.port} failed: {str(err) or 'timeout'}"
             ) from err
         _LOGGER.debug("TCP connected to %s:%s", self.host, self.port)
         self._closed_event.clear()
@@ -783,7 +783,7 @@ class AbsolutaClient:
                 changed = True
         elif cmd == Cmd.END_SESSION:
             _LOGGER.warning(
-                "Absoluta closed the ITv2 session (BOSS or mobile app session started?)"
+                "Absoluta ended the ITv2 session (BOSS or mobile app connected, or ABS-IP restarting)"
             )
             self._closed_event.set()
             self._fail_waiters(ConnectionFailed("session ended by panel"))
