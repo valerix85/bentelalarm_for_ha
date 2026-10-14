@@ -309,7 +309,7 @@ class FakePanel:
     async def _on_request(self, seq: int, req: int, d: bytes) -> None:
         if req == Cmd.PARTITION_STATUS:
             if d[:1] != b"\x02":
-                return  # Absoluta 42 (fw 3.60.28) ignores masks that are not 2 bytes
+                return  # the client must send the 2-byte mask of the Usage Guide
             self._send(self._partition_status())
         elif req == Cmd.ZONE_STATUS:
             first, off = m.read_var(d, 0)

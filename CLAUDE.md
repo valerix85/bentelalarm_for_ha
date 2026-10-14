@@ -44,6 +44,8 @@ The repository is English-only (code, comments, docs); Italian is used only in
   (or 18, 20) is answered with zones 1..16 anyway. Status of zones >16 is NOT available
   over ITv2 (labels are). This is not a client bug. Bentel/JCI support (Oct 2026): Absoluta
   16/42/104 are obsolete, no more support or firmware, so this will not be fixed upstream.
+  JCI engineering (13 Oct 2026) confirmed it is an intentional limit of the ITv2
+  implementation and no ABS-IP firmware (including 2.00.10) changes it.
 - Event log 0101/4101: 13-byte records = timestamp(4) flags(1) event id(2: class<<12 |
   restore<<11 | code) index(2: where, who) partition mask(4, only the last 2 bytes matter).
   Verified against the guide's examples. In zone events WHO is the 0-based zone index
@@ -66,10 +68,12 @@ The repository is English-only (code, comments, docs); Italian is used only in
 - Every integration login (including the reconnect after a bypass) is logged by the panel as
   "Riconosciuto Cod" (class 0, code 0x15): the client recognises it (one per login, the most
   recent) and neither shows nor fires it, otherwise it would hide the interesting event.
-- Partition Status request (0800 -> 0812): always send a 2-byte partition mask (the Usage Guide
-  says Absoluta has 16 partitions, mask length always 0x02). An Absoluta 42 fw 3.60.28 with ABS-IP
-  02.00 (issue #9) never answered `08 12 01 1f` (transport ACK only, no reply), so every poll
-  timed out and the session was dropped every ~30 s (Absoluta 16 fw 3.60.37 also answers 1 byte).
-  On the same panel the per-partition 0770 request answers 0x18 (the global list is used).
+- Partition Status request (0800 -> 0812): send a 2-byte partition mask, as the Usage Guide says
+  (Absoluta has 16 partitions, mask length always 0x02); Absoluta 16 fw 3.60.37 answers both.
+- Issue #9, Absoluta 42 fw 3.60.28 (solved, not a client issue): handshake, login, login
+  notifications, 0721 and the 0912 keep-alive worked, but every 0800 Command Request failed
+  (0770 per partition -> 0x18, 0812 -> transport ACK only), so polling timed out and the session
+  was reopened every ~30 s. Fixed on the user's side by replacing the ABS-IP and re-flashing the
+  panel firmware; afterwards 0811 answers all 42 zones (count 0x2a) on that panel.
 - One config entry per ABS-IP host: the config flow aborts on an already configured host before
   connecting (the ABS-IP accepts a single ITv2 session).

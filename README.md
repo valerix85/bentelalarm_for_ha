@@ -37,6 +37,7 @@ fully local, no cloud account, no MQTT bridge, no extra hardware.
 |---|---|---|
 | Absoluta 16 + ABS-IP | 3.60.37 | ✅ Tested by the author |
 | Absoluta 42 + ABS-IP | 3.60.27 | ✅ Reported working by a user |
+| Absoluta 42 + ABS-IP | 3.60.28 | ✅ Reported working by a user (all 42 zones) |
 | Absoluta Plus 48 + ABS-IP | 4.30.35 | ✅ Reported working by a user |
 
 Other models and firmware versions should work but have not been tested yet: feedback is
@@ -136,8 +137,9 @@ automation:
 
 - **Zones above the model limit**: the panel reports a maximum number of zones over ITv2
   (16 on an Absoluta 16). Zones configured above it (e.g. wireless zones 17–20) are not
-  created because the ABS-IP does not return their status. Use slots within the limit for
-  important sensors. Their alarm and tamper events still appear in the event log
+  created because the ABS-IP does not return their status. Bentel / Johnson Controls
+  engineering confirmed this is an intentional limit of the ITv2 implementation, not fixed
+  by any ABS-IP firmware. Use slots within the limit for important sensors. Their alarm and tamper events still appear in the event log
   (*Last event* sensor and `bentel_absoluta_event`).
 - **No more firmware updates**: Bentel / Johnson Controls has declared the Absoluta 16, 42
   and 104 panels obsolete (official support and firmware development have ended, October
@@ -158,7 +160,12 @@ automation:
 3. For a detailed log: *Settings → Devices & services → Bentel Absoluta → ⋮ → Enable debug
    logging*, reproduce the problem, then disable it to download the log (every packet is
    logged in hex; the user code in the login frame is redacted).
-4. [Open an issue](https://github.com/valerix85/bentelalarm_for_ha/issues/new/choose)
+4. **Connected, but no zone/partition status and a reconnection every ~30 s** (debug log shows
+   login working but status requests answered `0x18` or not at all): the ABS-IP cannot query
+   the panel. One user fixed it by replacing the ABS-IP module and re-flashing the panel with
+   its current firmware (settings are kept); see
+   [#9](https://github.com/valerix85/bentelalarm_for_ha/issues/9).
+5. [Open an issue](https://github.com/valerix85/bentelalarm_for_ha/issues/new/choose)
    attaching both files.
 
 ## Contributing
