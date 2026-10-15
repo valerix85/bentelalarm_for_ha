@@ -36,6 +36,7 @@ fully local, no cloud account, no MQTT bridge, no extra hardware.
 | Panel | Firmware | Status |
 |---|---|---|
 | Absoluta 16 + ABS-IP | 3.60.37 | ✅ Tested by the author |
+| Absoluta 42 + ABS-IP | 3.60.24 | ✅ Reported working by a user |
 | Absoluta 42 + ABS-IP | 3.60.27 | ✅ Reported working by a user |
 | Absoluta 42 + ABS-IP | 3.60.28 | ✅ Reported working by a user (all 42 zones) |
 | Absoluta Plus 48 + ABS-IP | 4.30.35 | ✅ Reported working by a user |
