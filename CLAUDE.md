@@ -70,10 +70,11 @@ The repository is English-only (code, comments, docs); Italian is used only in
   recent) and neither shows nor fires it, otherwise it would hide the interesting event.
 - Partition Status request (0800 -> 0812): send a 2-byte partition mask, as the Usage Guide says
   (Absoluta has 16 partitions, mask length always 0x02); Absoluta 16 fw 3.60.37 answers both.
-- Issue #9, Absoluta 42 fw 3.60.28 (solved, not a client issue): handshake, login, login
-  notifications, 0721 and the 0912 keep-alive worked, but every 0800 Command Request failed
-  (0770 per partition -> 0x18, 0812 -> transport ACK only), so polling timed out and the session
-  was reopened every ~30 s. Fixed on the user's side by replacing the ABS-IP and re-flashing the
-  panel firmware; afterwards 0811 answers all 42 zones (count 0x2a) on that panel.
+- ABS-IP firmware 2.00.09 / 2.00.10 (issues #8, #9): handshake, login, login notifications,
+  0721, 0912 keep-alive and the 0220 time broadcast work, but 0800 Command Requests get 0x18 or
+  no answer at all (0811 never; 0812 only right after a cold power-up) and no zone notifications
+  are sent over ITv2, while the Bentel app/cloud still gets them. Same panel and config with
+  ABS-IP 2.00.08 works (#8: Absoluta 42 fw 3.60.37, boards swapped; #9: after re-flashing the
+  panel the ABS-IP reported 2.00.08 and 0811 answered all 42 zones). Not a client issue.
 - One config entry per ABS-IP host: the config flow aborts on an already configured host before
   connecting (the ABS-IP accepts a single ITv2 session).
