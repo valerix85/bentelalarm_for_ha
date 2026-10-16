@@ -162,10 +162,13 @@ automation:
    logging*, reproduce the problem, then disable it to download the log (every packet is
    logged in hex; the user code in the login frame is redacted).
 4. **Connected, but no zone/partition status and a reconnection every ~30 s** (debug log shows
-   login working but status requests answered `0x18` or not at all): the ABS-IP cannot query
-   the panel. One user fixed it by replacing the ABS-IP module and re-flashing the panel with
-   its current firmware (settings are kept); see
-   [#9](https://github.com/valerix85/bentelalarm_for_ha/issues/9).
+   login working but status requests answered `0x18` or not at all): the ABS-IP does not answer
+   ITv2 status requests. Two users report this with **ABS-IP firmware 2.00.09 / 2.00.10**, while
+   2.00.08 works on the same panel
+   ([#8](https://github.com/valerix85/bentelalarm_for_ha/issues/8),
+   [#9](https://github.com/valerix85/bentelalarm_for_ha/issues/9)). In #9 re-flashing the panel
+   firmware with BOSS (settings are kept) left the ABS-IP on 2.00.08 and everything worked.
+   Check the ABS-IP firmware in BOSS before buying a new module.
 5. [Open an issue](https://github.com/valerix85/bentelalarm_for_ha/issues/new/choose)
    attaching both files.
 
