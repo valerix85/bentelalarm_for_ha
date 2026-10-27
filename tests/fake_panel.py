@@ -36,6 +36,9 @@ class FakePanel:
         # Next N connections: answer the client's 060A, then end the session
         # (seen on a real ABS-IP right after a lost connection)
         self.end_session_on_open = 0
+        # Next N command requests (0800) are acknowledged but never answered
+        # (seen on ABS-IP 02.00.10: a reply goes missing now and then)
+        self.drop_replies = 0
         self.pin = pin
         self.zones = list(zones)
         self.partitions = list(partitions)
@@ -200,6 +203,9 @@ class FakePanel:
                 )
             self._send(self._partition_status())
         elif cmd == Cmd.COMMAND_REQUEST:
+            if self.drop_replies:
+                self.drop_replies -= 1
+                return
             await self._on_request(p[0], (p[1] << 8) | p[2], p[3:])
         elif cmd == Cmd.SECTION_READ:
             section = (p[2] << 8) | p[3]
