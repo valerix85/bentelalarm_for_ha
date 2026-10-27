@@ -300,6 +300,29 @@ async def test_occasional_unanswered_request_keeps_session(monkeypatch):
         await panel.stop()
 
 
+@pytest.mark.asyncio
+async def test_full_zone_reply_needs_one_request():
+    """When the panel answers with all its zones, a gap in the user zones must
+    not cost a second zone request per poll."""
+    panel = FakePanel(zones=(1, 2, 3, 5))  # runs 1..3 and 5
+    panel.full_zone_reply = True
+    client = await _started(panel, load_labels=False)
+    try:
+        panel.zone_raw[5] = 0x01
+        before = len(panel.log)
+        await client.refresh()
+        zone_reqs = [
+            p
+            for cmd, p in panel.log[before:]
+            if cmd == Cmd.COMMAND_REQUEST and p[1:3] == b"\x08\x11"
+        ]
+        assert len(zone_reqs) == 1
+        assert client.zones[5].open
+    finally:
+        await client.stop()
+        await panel.stop()
+
+
 def test_labels_total_length_and_per_label_length():
     names = [f"Label {i}".ljust(16).encode() for i in range(1, 9)]
     data = b"".join(names)
