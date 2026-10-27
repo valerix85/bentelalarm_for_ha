@@ -39,6 +39,9 @@ class FakePanel:
         # Next N command requests (0800) are acknowledged but never answered
         # (seen on ABS-IP 02.00.10: a reply goes missing now and then)
         self.drop_replies = 0
+        # Answer every zone request with the status of all zones from 1
+        # (seen on an Absoluta Plus 48: always "01 01 01 30")
+        self.full_zone_reply = False
         self.pin = pin
         self.zones = list(zones)
         self.partitions = list(partitions)
@@ -327,6 +330,8 @@ class FakePanel:
                 return
             if self.max_zones_per_reply:
                 count = min(count, self.max_zones_per_reply)
+            if self.full_zone_reply:
+                first, count = 1, max(self.zones)
             body = m.var_bytes(first) + m.var_bytes(count) + b"\x01"
             body += bytes(self.zone_raw.get(z, 0) for z in range(first, first + count))
             self._send(cmd_bytes(Cmd.ZONE_STATUS) + body)
