@@ -266,6 +266,40 @@ async def test_reconnect_failure_is_logged(monkeypatch, caplog):
         await client.stop()
 
 
+@pytest.mark.asyncio
+async def test_occasional_unanswered_request_keeps_session(monkeypatch):
+    """A reply that never comes (transport ACK only) must not drop the session,
+    nor switch to single-zone polling; repeated ones still do."""
+    import itv2.client as c
+
+    monkeypatch.setattr(c, "APP_TIMEOUT", 0.3)
+    panel = FakePanel()
+    client = await _started(panel, load_labels=False)
+    try:
+        for _ in range(3):  # isolated lost replies, separated by good polls
+            panel.drop_replies = 1
+            for _ in range(40):
+                await asyncio.sleep(0.05)
+                if not panel.drop_replies:
+                    break
+            await asyncio.sleep(1.0)
+            assert client.connected
+        assert panel.connections == 1
+        assert not client._single_zone_mode
+
+        orig_sleep = asyncio.sleep
+        monkeypatch.setattr(c.asyncio, "sleep", lambda s: orig_sleep(min(s, 0.05)))
+        panel.drop_replies = c.MAX_UNANSWERED + 2  # the panel stops answering
+        for _ in range(100):
+            await orig_sleep(0.05)
+            if panel.connections > 1:
+                break
+        assert panel.connections > 1
+    finally:
+        await client.stop()
+        await panel.stop()
+
+
 def test_labels_total_length_and_per_label_length():
     names = [f"Label {i}".ljust(16).encode() for i in range(1, 9)]
     data = b"".join(names)
