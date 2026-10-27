@@ -76,5 +76,9 @@ The repository is English-only (code, comments, docs); Italian is used only in
   are sent over ITv2, while the Bentel app/cloud still gets them. Same panel and config with
   ABS-IP 2.00.08 works (#8: Absoluta 42 fw 3.60.37, boards swapped; #9: after re-flashing the
   panel the ABS-IP reported 2.00.08 and 0811 answered all 42 zones). Not a client issue.
+- Lost replies (issue #11, Absoluta Plus 48 B104 fw 4.30.32, ABS-IP 02.00.10.01): most 0811/0812
+  requests are answered, but now and then one is only transport-ACKed and its reply never comes.
+  The poll loop tolerates up to MAX_UNANSWERED (3) consecutive unanswered requests before dropping
+  the session, and a multi-zone read is retried once before switching to single-zone polling.
 - One config entry per ABS-IP host: the config flow aborts on an already configured host before
   connecting (the ABS-IP accepts a single ITv2 session).
