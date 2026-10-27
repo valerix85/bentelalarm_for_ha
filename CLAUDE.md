@@ -80,5 +80,8 @@ The repository is English-only (code, comments, docs); Italian is used only in
   requests are answered, but now and then one is only transport-ACKed and its reply never comes.
   The poll loop tolerates up to MAX_UNANSWERED (3) consecutive unanswered requests before dropping
   the session, and a multi-zone read is retried once before switching to single-zone polling.
+- Absoluta Plus 48 (issue #11) answers every 0811 request with all 48 zones from zone 1
+  ("01 01 01 30"), whatever range was asked: zone runs already covered by an earlier reply in the
+  same poll are skipped, so a gap in the user zones does not cost an extra request.
 - One config entry per ABS-IP host: the config flow aborts on an already configured host before
   connecting (the ABS-IP accepts a single ITv2 session).
