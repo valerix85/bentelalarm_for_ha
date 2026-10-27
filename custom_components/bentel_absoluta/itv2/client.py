@@ -80,6 +80,10 @@ MAX_ZONE_RUN = 64
 ARM_SETTLE_TIME = 6.0
 EVENTS_INTERVAL = 30.0
 MAX_RECONNECT_DELAY = 60.0
+# Consecutive unanswered requests (transport ACK received, reply missing) tolerated
+# before the session is considered lost: some ABS-IP firmware (02.00.10) drops a
+# reply now and then while the link is fine.
+MAX_UNANSWERED = 3
 EVENTS_READ = 5
 
 
@@ -249,6 +253,7 @@ class AbsolutaClient:
         self._closed_event = asyncio.Event()
         self._last_tx = 0.0
         self._single_zone_mode = False
+        self._unanswered = 0
         self._refresh_requested = asyncio.Event()
         self._stopping = False
         self._background: set[asyncio.Task] = set()
@@ -388,6 +393,7 @@ class AbsolutaClient:
         self._expected.clear()
         self._reply_tasks.clear()
         self._single_zone_mode = False
+        self._unanswered = 0
         self.exit_delay.clear()
         self.entry_delay.clear()
 
@@ -513,14 +519,31 @@ class AbsolutaClient:
             if self._closed_event.is_set():
                 break
             now = time.monotonic()
-            if self._refresh_requested.is_set() or now - last_poll >= self.poll_interval:
-                self._refresh_requested.clear()
-                last_poll = now
-                await self.refresh()
-            elif now - self._last_tx >= KEEP_ALIVE_INTERVAL:
-                await self._request(
-                    Cmd.USER_ACTIVITY, msg.build_user_activity(UserActivity.KEEP_ALIVE)
+            try:
+                if self._refresh_requested.is_set() or now - last_poll >= self.poll_interval:
+                    self._refresh_requested.clear()
+                    last_poll = now
+                    await self.refresh()
+                elif now - self._last_tx >= KEEP_ALIVE_INTERVAL:
+                    await self._request(
+                        Cmd.USER_ACTIVITY, msg.build_user_activity(UserActivity.KEEP_ALIVE)
+                    )
+                else:
+                    continue
+            except TimeoutError as err:
+                # The packet was acknowledged but its reply never came: retry on the
+                # next cycle and drop the session only if it keeps happening.
+                self._unanswered += 1
+                if self._unanswered >= MAX_UNANSWERED or self._closed_event.is_set():
+                    raise
+                _LOGGER.debug(
+                    "Request unanswered (%s), keeping the session (%d/%d)",
+                    str(err) or "timeout",
+                    self._unanswered,
+                    MAX_UNANSWERED,
                 )
+                continue
+            self._unanswered = 0
         raise ConnectionFailed("connection closed")
 
     def request_refresh(self) -> None:
@@ -653,7 +676,7 @@ class AbsolutaClient:
         cmd: int,
         payload: bytes = b"",
         matcher: Callable[[int, bytes], Any] | None = None,
-        timeout: float = APP_TIMEOUT,
+        timeout: float | None = None,
     ) -> Any:
         """Send a command with app sequence number and wait for its answer.
 
@@ -668,7 +691,7 @@ class AbsolutaClient:
             self._pending = _Pending(int(cmd), self._app_seq, matcher, fut)
             try:
                 await self._send_app(int(cmd).to_bytes(2, "big") + bytes([self._app_seq]) + payload)
-                return await asyncio.wait_for(fut, timeout)
+                return await asyncio.wait_for(fut, timeout or APP_TIMEOUT)
             finally:
                 self._pending = None
 
@@ -1117,9 +1140,17 @@ class AbsolutaClient:
         zones = [z for z in self.user_zones if z not in self.invalid_zones]
         for first, count in _runs(zones, run_len):
             try:
-                got = await self._request_status(
-                    Cmd.ZONE_STATUS, msg.build_zone_status_request(first, count)
-                )
+                request = msg.build_zone_status_request(first, count)
+                try:
+                    got = await self._request_status(Cmd.ZONE_STATUS, request)
+                except TimeoutError:
+                    if count == 1:
+                        raise
+                    # One lost reply is not enough to give up multi-zone reads
+                    _LOGGER.debug(
+                        "Zone status %d..%d unanswered, retrying", first, first + count - 1
+                    )
+                    got = await self._request_status(Cmd.ZONE_STATUS, request)
                 # Some panels truncate multi-zone answers (e.g. to 16 zones):
                 # read the zones left out one by one.
                 for zone in range(first, first + count):
