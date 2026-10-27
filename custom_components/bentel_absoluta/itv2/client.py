@@ -1138,7 +1138,12 @@ class AbsolutaClient:
             )
         run_len = 1 if self._single_zone_mode else MAX_ZONE_RUN
         zones = [z for z in self.user_zones if z not in self.invalid_zones]
+        # Some panels answer any zone request with the status of all their zones
+        # (e.g. Absoluta Plus: zones 1..48): skip runs already covered by a reply.
+        covered: set[int] = set()
         for first, count in _runs(zones, run_len):
+            if all(z in covered for z in range(first, first + count) if z in zones):
+                continue
             try:
                 request = msg.build_zone_status_request(first, count)
                 try:
@@ -1151,6 +1156,7 @@ class AbsolutaClient:
                         "Zone status %d..%d unanswered, retrying", first, first + count - 1
                     )
                     got = await self._request_status(Cmd.ZONE_STATUS, request)
+                covered.update(got)
                 # Some panels truncate multi-zone answers (e.g. to 16 zones):
                 # read the zones left out one by one.
                 for zone in range(first, first + count):
