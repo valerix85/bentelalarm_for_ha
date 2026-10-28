@@ -475,3 +475,72 @@ async def test_debug_log_redacts_access_code(caplog):
     finally:
         await client.stop()
         await panel.stop()
+
+
+@pytest.mark.asyncio
+async def test_zones_polled_first_partitions_when_due():
+    """Zones are read before partitions; partitions only when due (start-up,
+    notification, zone change or every PARTITION_POLL_INTERVAL)."""
+    panel = FakePanel()
+    await panel.start()
+    # Slow background polling, so that only the refreshes below are seen
+    client = AbsolutaClient("127.0.0.1", "1234", panel.port, poll_interval=30, load_labels=False)
+    await client.start()
+
+    # zones 1..3 and 5: two zone requests, then the partitions
+    ZONES_THEN_PARTITIONS = [b"\x08\x11", b"\x08\x11", b"\x08\x12"]  # noqa: N806
+
+    def requests(since: int) -> list[bytes]:
+        return [p[1:3] for cmd, p in panel.log[since:] if cmd == Cmd.COMMAND_REQUEST]
+
+    try:
+        before = len(panel.log)
+        await client.refresh()
+        await client.refresh()
+        assert set(requests(before)) == {b"\x08\x11"}  # no zone change: zones only
+
+        panel.zone_raw[2] = 0x01
+        before = len(panel.log)
+        await client.refresh()
+        assert requests(before) == ZONES_THEN_PARTITIONS  # zones first
+        assert client.zones[2].open
+
+        before = len(panel.log)
+        client._partitions_due = True  # set by request_refresh() on notifications
+        await client.refresh()
+        assert requests(before) == ZONES_THEN_PARTITIONS
+
+        client._last_partition_read -= 31  # safety-net interval elapsed
+        before = len(panel.log)
+        await client.refresh()
+        assert requests(before) == ZONES_THEN_PARTITIONS
+    finally:
+        await client.stop()
+        await panel.stop()
+
+
+@pytest.mark.asyncio
+async def test_status_timeout_adapts_to_reply_times(monkeypatch):
+    """With fast replies a lost one is retried after STATUS_TIMEOUT_MIN, not
+    APP_TIMEOUT; the retry itself waits the full APP_TIMEOUT."""
+    import itv2.client as c
+
+    monkeypatch.setattr(c, "STATUS_TIMEOUT_MIN", 0.2)
+    panel = FakePanel()
+    client = await _started(panel, load_labels=False)
+    try:
+        assert client._status_timeout(Cmd.ZONE_STATUS) == c.APP_TIMEOUT  # no data yet
+        for _ in range(c.STATUS_SAMPLES):
+            await client.refresh()
+        assert client._status_timeout(Cmd.ZONE_STATUS) < 1.0
+        panel.drop_replies = 1
+        loop = asyncio.get_running_loop()
+        start = loop.time()
+        await client.refresh()  # lost reply, retried within the same poll
+        assert loop.time() - start < 1.0
+        assert client.connected
+        client._status_timed_out.add(Cmd.ZONE_STATUS)
+        assert client._status_timeout(Cmd.ZONE_STATUS) == c.APP_TIMEOUT
+    finally:
+        await client.stop()
+        await panel.stop()

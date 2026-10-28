@@ -54,7 +54,7 @@
           "arm_modes": "Modalità di inserimento proposte per ogni area"
         },
         "data_description": {
-          "poll_interval": "Lo stato aperto/chiuso delle zone non viene notificato dalla centrale e viene letto a questo intervallo (funziona anche da keep-alive).",
+          "poll_interval": "Lo stato aperto/chiuso delle zone non viene notificato dalla centrale e viene letto a questo intervallo (funziona anche da keep-alive). 1-2 s per zone che accendono luci.",
           "require_code": "Se attivo, le entità di allarme chiedono il PIN utente e i pulsanti delle modalità di inserimento e gli interruttori di esclusione zona non vengono creati.",
           "arm_modes": "Le aree Absoluta di solito sono solo inserite o disinserite (Fuori casa = inserimento totale). Attiva In casa (parziale) e Notte (parziale istantaneo) solo se le usi sulla centrale."
         }

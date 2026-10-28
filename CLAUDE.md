@@ -83,5 +83,14 @@ The repository is English-only (code, comments, docs); Italian is used only in
 - Absoluta Plus 48 (issue #11) answers every 0811 request with all 48 zones from zone 1
   ("01 01 01 30"), whatever range was asked: zone runs already covered by an earlier reply in the
   same poll are skipped, so a gap in the user zones does not cost an extra request.
+- Poll order (0.3.19): zones (0811) first, then partitions (0812) only when due: start-up,
+  request_refresh() (notifications, commands), a zone change in this poll (the "ready" flag
+  follows the zones) or every max(poll_interval, PARTITION_POLL_INTERVAL = 10 s). The ABS-IP
+  notifies 0812 on alarms/tampers/faults/bypass (Usage Guide); 0210 Life Style zone notifications
+  are not supported, zones can only be polled. Status requests use an adaptive timeout:
+  2 x slowest of the last 50 replies, min 3 s, max APP_TIMEOUT; the request after a timeout
+  always waits APP_TIMEOUT (so a slow panel cannot cascade into MAX_UNANSWERED).
+  Issue #11 timings (Plus 48, ABS-IP 02.00.10.01): 0811 median 0.62 s / max 1.8 s, 0812 median
+  0.98 s / max 2.5 s; lost replies never arrive late.
 - One config entry per ABS-IP host: the config flow aborts on an already configured host before
   connecting (the ABS-IP accepts a single ITv2 session).

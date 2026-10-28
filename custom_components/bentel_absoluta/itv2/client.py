@@ -25,9 +25,13 @@ Every non-empty packet is acknowledged at transport level either by a
 sequence number. We always send a simple ACK straight away, and we keep a
 single outgoing packet in flight until the panel acknowledges it.
 
-Zone open/close is *not* notified spontaneously by the ABS-IP plug-in, so
-zone status is polled (default every 5 seconds, which also works as the
-recommended keep alive).
+Zone open/close is *not* notified spontaneously by the ABS-IP plug-in (the
+Life Style 0210 notification is not supported), so zone status is polled
+(default every 5 seconds, which also works as the recommended keep alive).
+Partition status (0812) is notified by the ABS-IP on alarms, tampers, faults
+and bypass changes, so it is read less often: after a notification, after a
+zone change (the "ready" flag follows the zones) and at least every
+PARTITION_POLL_INTERVAL.
 """
 
 from __future__ import annotations
@@ -37,6 +41,7 @@ import contextlib
 import datetime as dt
 import logging
 import time
+from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -85,6 +90,13 @@ MAX_RECONNECT_DELAY = 60.0
 # reply now and then while the link is fine.
 MAX_UNANSWERED = 3
 EVENTS_READ = 5
+# Partition status is notified by the ABS-IP: polled only as a safety net
+PARTITION_POLL_INTERVAL = 10.0
+# Status requests use a timeout adapted to the panel's reply times (twice the
+# slowest of the last STATUS_SAMPLES replies, at least STATUS_TIMEOUT_MIN s):
+# a lost reply is retried sooner. The retry always waits APP_TIMEOUT.
+STATUS_SAMPLES = 50
+STATUS_TIMEOUT_MIN = 3.0
 
 
 def _being_cancelled() -> bool:
@@ -254,6 +266,10 @@ class AbsolutaClient:
         self._last_tx = 0.0
         self._single_zone_mode = False
         self._unanswered = 0
+        self._partitions_due = True
+        self._last_partition_read = 0.0
+        self._reply_times: dict[int, deque[float]] = {}
+        self._status_timed_out: set[int] = set()
         self._refresh_requested = asyncio.Event()
         self._stopping = False
         self._background: set[asyncio.Task] = set()
@@ -394,6 +410,8 @@ class AbsolutaClient:
         self._reply_tasks.clear()
         self._single_zone_mode = False
         self._unanswered = 0
+        self._partitions_due = True
+        self._status_timed_out.clear()
         self.exit_delay.clear()
         self.entry_delay.clear()
 
@@ -548,6 +566,7 @@ class AbsolutaClient:
 
     def request_refresh(self) -> None:
         """Ask the background loop for an immediate status poll."""
+        self._partitions_due = True
         self._refresh_requested.set()
 
     # ------------------------------------------------------------------
@@ -737,6 +756,7 @@ class AbsolutaClient:
             status = msg.parse_partition_status(p)
             self.partitions.update(status)
             self.arming_requested.difference_update(status)
+            self._last_partition_read = time.monotonic()
             changed = True
         elif cmd == Cmd.ZONE_STATUS:
             self.zones.update(msg.parse_zone_status(p))
@@ -1034,7 +1054,28 @@ class AbsolutaClient:
                 return msg.parse_partition_status(payload)
             return msg.parse_zone_status(payload)
 
-        return await self._request(Cmd.COMMAND_REQUEST, msg.build_command_request(cmd, data), match)
+        timeout = self._status_timeout(cmd)
+        start = time.monotonic()
+        try:
+            result = await self._request(
+                Cmd.COMMAND_REQUEST, msg.build_command_request(cmd, data), match, timeout
+            )
+        except TimeoutError:
+            self._status_timed_out.add(cmd)
+            raise
+        self._status_timed_out.discard(cmd)
+        self._reply_times.setdefault(cmd, deque(maxlen=STATUS_SAMPLES)).append(
+            time.monotonic() - start
+        )
+        return result
+
+    def _status_timeout(self, cmd: int) -> float:
+        """Twice the slowest recent reply; the full APP_TIMEOUT until enough
+        replies are known and for the request following a timeout."""
+        samples = self._reply_times.get(cmd)
+        if cmd in self._status_timed_out or not samples or len(samples) < STATUS_SAMPLES // 2:
+            return APP_TIMEOUT
+        return min(APP_TIMEOUT, max(STATUS_TIMEOUT_MIN, 2 * max(samples)))
 
     async def refresh(self) -> None:
         """Poll partition and zone status once (and the event log when due)."""
@@ -1131,11 +1172,24 @@ class AbsolutaClient:
         ]
 
     async def _refresh_status(self) -> None:
-        """Poll partition and zone status once."""
-        if self.user_partitions:
+        """Poll zone status, then partition status when due."""
+        before = {z: st.raw for z, st in self.zones.items()}
+        try:
+            await self._refresh_zones()
+        finally:
+            if {z: st.raw for z, st in self.zones.items()} != before:
+                self._partitions_due = True
+        if self.user_partitions and (
+            self._partitions_due
+            or time.monotonic() - self._last_partition_read
+            >= max(self.poll_interval, PARTITION_POLL_INTERVAL)
+        ):
             await self._request_status(
                 Cmd.PARTITION_STATUS, msg.build_partition_status_request(self.user_partitions)
             )
+            self._partitions_due = False
+
+    async def _refresh_zones(self) -> None:
         run_len = 1 if self._single_zone_mode else MAX_ZONE_RUN
         zones = [z for z in self.user_zones if z not in self.invalid_zones]
         # Some panels answer any zone request with the status of all their zones
