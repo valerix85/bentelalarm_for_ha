@@ -94,7 +94,8 @@ EVENTS_READ = 5
 PARTITION_POLL_INTERVAL = 10.0
 # Status requests use a timeout adapted to the panel's reply times (twice the
 # slowest of the last STATUS_SAMPLES replies, at least STATUS_TIMEOUT_MIN s):
-# a lost reply is retried sooner. The retry always waits APP_TIMEOUT.
+# a lost reply is retried sooner. After two timeouts in a row the full
+# APP_TIMEOUT is used, so that a slower panel gets new reply time samples.
 STATUS_SAMPLES = 50
 STATUS_TIMEOUT_MIN = 3.0
 
@@ -269,7 +270,10 @@ class AbsolutaClient:
         self._partitions_due = True
         self._last_partition_read = 0.0
         self._reply_times: dict[int, deque[float]] = {}
-        self._status_timed_out: set[int] = set()
+        self._status_timeouts: dict[int, int] = {}  # consecutive timeouts per command
+        # A multi-zone request was answered: later timeouts are lost replies,
+        # not a panel unable to answer multi-zone requests.
+        self._multi_zone_answered = False
         self._refresh_requested = asyncio.Event()
         self._stopping = False
         self._background: set[asyncio.Task] = set()
@@ -411,7 +415,7 @@ class AbsolutaClient:
         self._single_zone_mode = False
         self._unanswered = 0
         self._partitions_due = True
-        self._status_timed_out.clear()
+        self._status_timeouts.clear()
         self.exit_delay.clear()
         self.entry_delay.clear()
 
@@ -1061,9 +1065,9 @@ class AbsolutaClient:
                 Cmd.COMMAND_REQUEST, msg.build_command_request(cmd, data), match, timeout
             )
         except TimeoutError:
-            self._status_timed_out.add(cmd)
+            self._status_timeouts[cmd] = self._status_timeouts.get(cmd, 0) + 1
             raise
-        self._status_timed_out.discard(cmd)
+        self._status_timeouts.pop(cmd, None)
         self._reply_times.setdefault(cmd, deque(maxlen=STATUS_SAMPLES)).append(
             time.monotonic() - start
         )
@@ -1071,9 +1075,13 @@ class AbsolutaClient:
 
     def _status_timeout(self, cmd: int) -> float:
         """Twice the slowest recent reply; the full APP_TIMEOUT until enough
-        replies are known and for the request following a timeout."""
+        replies are known and after two timeouts in a row."""
         samples = self._reply_times.get(cmd)
-        if cmd in self._status_timed_out or not samples or len(samples) < STATUS_SAMPLES // 2:
+        if (
+            self._status_timeouts.get(cmd, 0) >= 2
+            or not samples
+            or len(samples) < STATUS_SAMPLES // 2
+        ):
             return APP_TIMEOUT
         return min(APP_TIMEOUT, max(STATUS_TIMEOUT_MIN, 2 * max(samples)))
 
@@ -1210,12 +1218,14 @@ class AbsolutaClient:
                         "Zone status %d..%d unanswered, retrying", first, first + count - 1
                     )
                     got = await self._request_status(Cmd.ZONE_STATUS, request)
+                if count > 1:
+                    self._multi_zone_answered = True
                 covered.update(got)
                 # Some panels truncate multi-zone answers (e.g. to 16 zones):
                 # read the zones left out one by one.
                 for zone in range(first, first + count):
                     if zone not in got and zone in zones:
-                        await self._read_single_zone(zone)
+                        covered.update(await self._read_single_zone(zone))
                 continue
             except CommandFailed as err:
                 if count == 1:
@@ -1228,26 +1238,32 @@ class AbsolutaClient:
                 if count == 1:
                     self._zone_timeout(first)
                     continue
+                if self._multi_zone_answered:
+                    # Two lost replies in a row on a panel that does answer
+                    # multi-zone requests: keep them, count it as unanswered.
+                    raise
                 _LOGGER.warning(
                     "Panel did not answer a multi-zone status request, "
                     "switching to single-zone polling"
                 )
                 self._single_zone_mode = True
             for zone in range(first, first + count):
-                if zone in zones:
-                    await self._read_single_zone(zone)
+                if zone in zones and zone not in covered:
+                    covered.update(await self._read_single_zone(zone))
 
-    async def _read_single_zone(self, zone: int) -> None:
+    async def _read_single_zone(self, zone: int) -> dict:
         try:
             got = await self._request_status(
                 Cmd.ZONE_STATUS, msg.build_zone_status_request(zone, 1)
             )
             if zone not in got:
                 self._zone_unavailable(zone, f"answer did not include it: zones {sorted(got)}")
+            return got
         except CommandFailed as err:
             self._zone_unavailable(zone, err)
         except TimeoutError:
             self._zone_timeout(zone)
+        return {}
 
     async def _probe_missing_zones(self) -> None:
         """Zones still without status after the first poll are checked one by one."""
