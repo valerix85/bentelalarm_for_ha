@@ -289,11 +289,12 @@ async def test_occasional_unanswered_request_keeps_session(monkeypatch):
 
         orig_sleep = asyncio.sleep
         monkeypatch.setattr(c.asyncio, "sleep", lambda s: orig_sleep(min(s, 0.05)))
-        panel.drop_replies = c.MAX_UNANSWERED + 2  # the panel stops answering
-        for _ in range(100):
+        panel.drop_replies = 1000  # the panel stops answering
+        for _ in range(200):
             await orig_sleep(0.05)
             if panel.connections > 1:
                 break
+        panel.drop_replies = 0
         assert panel.connections > 1
     finally:
         await client.stop()
@@ -539,8 +540,35 @@ async def test_status_timeout_adapts_to_reply_times(monkeypatch):
         await client.refresh()  # lost reply, retried within the same poll
         assert loop.time() - start < 1.0
         assert client.connected
-        client._status_timed_out.add(Cmd.ZONE_STATUS)
+        client._status_timeouts[Cmd.ZONE_STATUS] = 1  # the retry is adaptive too
+        assert client._status_timeout(Cmd.ZONE_STATUS) < 1.0
+        client._status_timeouts[Cmd.ZONE_STATUS] = 2  # two in a row: full timeout
         assert client._status_timeout(Cmd.ZONE_STATUS) == c.APP_TIMEOUT
+    finally:
+        await client.stop()
+        await panel.stop()
+
+
+@pytest.mark.asyncio
+async def test_two_lost_multi_zone_replies_keep_multi_zone(monkeypatch):
+    """Once multi-zone requests were answered, two lost replies in a row are
+    counted as unanswered, without switching to single-zone polling."""
+    import itv2.client as c
+
+    monkeypatch.setattr(c, "APP_TIMEOUT", 0.3)
+    panel = FakePanel()
+    await panel.start()
+    client = AbsolutaClient("127.0.0.1", "1234", panel.port, poll_interval=30, load_labels=False)
+    await client.start()
+    try:
+        assert client._multi_zone_answered
+        panel.drop_replies = 2  # the request and its retry
+        with pytest.raises(TimeoutError):
+            await client.refresh()
+        assert not client._single_zone_mode
+        await client.refresh()
+        assert client.connected
+        assert not client._single_zone_mode
     finally:
         await client.stop()
         await panel.stop()
