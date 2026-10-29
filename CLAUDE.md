@@ -88,8 +88,12 @@ The repository is English-only (code, comments, docs); Italian is used only in
   follows the zones) or every max(poll_interval, PARTITION_POLL_INTERVAL = 10 s). The ABS-IP
   notifies 0812 on alarms/tampers/faults/bypass (Usage Guide); 0210 Life Style zone notifications
   are not supported, zones can only be polled. Status requests use an adaptive timeout:
-  2 x slowest of the last 50 replies, min 3 s, max APP_TIMEOUT; the request after a timeout
-  always waits APP_TIMEOUT (so a slow panel cannot cascade into MAX_UNANSWERED).
+  2 x slowest of the last 50 replies, min 3 s, max APP_TIMEOUT; the retry is adaptive too, and
+  after two timeouts in a row the full APP_TIMEOUT is used (a slow panel gets new samples).
+- Single-zone fallback (0.3.20) only if no multi-zone request was ever answered: once one was,
+  two lost replies in a row are a TimeoutError counted by the poll loop (issue #11 at 1 s
+  polling: ~1 double loss every 13 h). When the ABS-IP loses a reply its own seq does not
+  advance: it ACKs the request but never generates the reply (not a network loss).
   Issue #11 timings (Plus 48, ABS-IP 02.00.10.01): 0811 median 0.62 s / max 1.8 s, 0812 median
   0.98 s / max 2.5 s; lost replies never arrive late.
 - One config entry per ABS-IP host: the config flow aborts on an already configured host before
