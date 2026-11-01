@@ -29,8 +29,9 @@ Zone open/close is *not* notified spontaneously by the ABS-IP plug-in (the
 Life Style 0210 notification is not supported), so zone status is polled
 (default every 5 seconds, which also works as the recommended keep alive).
 Partition status (0812) is notified by the ABS-IP on alarms, tampers, faults
-and bypass changes, so it is read less often: after a notification, after a
-zone change (the "ready" flag follows the zones) and at least every
+and bypass changes, so it is read less often: after a notification or a
+command, once the zones stop changing (the "ready" flag follows the zones,
+and zone reads are not delayed while there is movement) and at least every
 PARTITION_POLL_INTERVAL.
 """
 
@@ -268,6 +269,7 @@ class AbsolutaClient:
         self._single_zone_mode = False
         self._unanswered = 0
         self._partitions_due = True
+        self._partitions_stale = False  # zones changed: read partitions once they settle
         self._last_partition_read = 0.0
         self._reply_times: dict[int, deque[float]] = {}
         self._status_timeouts: dict[int, int] = {}  # consecutive timeouts per command
@@ -554,14 +556,16 @@ class AbsolutaClient:
                     continue
             except TimeoutError as err:
                 # The packet was acknowledged but its reply never came: retry on the
-                # next cycle and drop the session only if it keeps happening.
+                # next cycle and drop the session only if it keeps happening, i.e.
+                # nothing answered in between or the same request keeps failing.
                 self._unanswered += 1
-                if self._unanswered >= MAX_UNANSWERED or self._closed_event.is_set():
+                failures = max(self._unanswered, *self._status_timeouts.values(), 0)
+                if failures >= MAX_UNANSWERED or self._closed_event.is_set():
                     raise
                 _LOGGER.debug(
                     "Request unanswered (%s), keeping the session (%d/%d)",
                     str(err) or "timeout",
-                    self._unanswered,
+                    failures,
                     MAX_UNANSWERED,
                 )
                 continue
@@ -714,7 +718,13 @@ class AbsolutaClient:
             self._pending = _Pending(int(cmd), self._app_seq, matcher, fut)
             try:
                 await self._send_app(int(cmd).to_bytes(2, "big") + bytes([self._app_seq]) + payload)
-                return await asyncio.wait_for(fut, timeout or APP_TIMEOUT)
+                try:
+                    result = await asyncio.wait_for(fut, timeout or APP_TIMEOUT)
+                except CommandFailed:
+                    self._unanswered = 0  # refused, but answered
+                    raise
+                self._unanswered = 0
+                return result
             finally:
                 self._pending = None
 
@@ -1182,13 +1192,16 @@ class AbsolutaClient:
     async def _refresh_status(self) -> None:
         """Poll zone status, then partition status when due."""
         before = {z: st.raw for z, st in self.zones.items()}
+        changed = True
         try:
             await self._refresh_zones()
+            changed = {z: st.raw for z, st in self.zones.items()} != before
         finally:
-            if {z: st.raw for z, st in self.zones.items()} != before:
-                self._partitions_due = True
+            if changed:
+                self._partitions_stale = True
         if self.user_partitions and (
             self._partitions_due
+            or (self._partitions_stale and not changed)
             or time.monotonic() - self._last_partition_read
             >= max(self.poll_interval, PARTITION_POLL_INTERVAL)
         ):
@@ -1196,6 +1209,7 @@ class AbsolutaClient:
                 Cmd.PARTITION_STATUS, msg.build_partition_status_request(self.user_partitions)
             )
             self._partitions_due = False
+            self._partitions_stale = False
 
     async def _refresh_zones(self) -> None:
         run_len = 1 if self._single_zone_mode else MAX_ZONE_RUN
