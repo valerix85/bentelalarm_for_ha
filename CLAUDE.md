@@ -78,14 +78,16 @@ The repository is English-only (code, comments, docs); Italian is used only in
   panel the ABS-IP reported 2.00.08 and 0811 answered all 42 zones). Not a client issue.
 - Lost replies (issue #11, Absoluta Plus 48 B104 fw 4.30.32, ABS-IP 02.00.10.01): most 0811/0812
   requests are answered, but now and then one is only transport-ACKed and its reply never comes.
-  The poll loop tolerates up to MAX_UNANSWERED (3) consecutive unanswered requests before dropping
-  the session, and a multi-zone read is retried once before switching to single-zone polling.
+  The poll loop drops the session after MAX_UNANSWERED (3) unanswered requests with no reply in
+  between (any answered request resets the count, 0.3.21) or 3 timeouts in a row of the same
+  status command (a panel answering zones but never partitions still reconnects), and a multi-zone read is retried once before switching to single-zone polling.
 - Absoluta Plus 48 (issue #11) answers every 0811 request with all 48 zones from zone 1
   ("01 01 01 30"), whatever range was asked: zone runs already covered by an earlier reply in the
   same poll are skipped, so a gap in the user zones does not cost an extra request.
 - Poll order (0.3.19): zones (0811) first, then partitions (0812) only when due: start-up,
-  request_refresh() (notifications, commands), a zone change in this poll (the "ready" flag
-  follows the zones) or every max(poll_interval, PARTITION_POLL_INTERVAL = 10 s). The ABS-IP
+  request_refresh() (notifications, commands), zones settled after a change (0.3.21: the poll
+  after the last zone change, so 0812 reads, and a lost 0812 waiting its timeout, do not delay
+  zone reads during movement; the "ready" flag follows the zones) or every max(poll_interval, PARTITION_POLL_INTERVAL = 10 s). The ABS-IP
   notifies 0812 on alarms/tampers/faults/bypass (Usage Guide); 0210 Life Style zone notifications
   are not supported, zones can only be polled. Status requests use an adaptive timeout:
   2 x slowest of the last 50 replies, min 3 s, max APP_TIMEOUT; the retry is adaptive too, and
