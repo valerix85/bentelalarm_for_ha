@@ -481,7 +481,7 @@ async def test_debug_log_redacts_access_code(caplog):
 @pytest.mark.asyncio
 async def test_zones_polled_first_partitions_when_due():
     """Zones are read before partitions; partitions only when due (start-up,
-    notification, zone change or every PARTITION_POLL_INTERVAL)."""
+    notification, zones settled after a change or every PARTITION_POLL_INTERVAL)."""
     panel = FakePanel()
     await panel.start()
     # Slow background polling, so that only the refreshes below are seen
@@ -500,11 +500,22 @@ async def test_zones_polled_first_partitions_when_due():
         await client.refresh()
         assert set(requests(before)) == {b"\x08\x11"}  # no zone change: zones only
 
+        ZONES = [b"\x08\x11", b"\x08\x11"]  # noqa: N806
         panel.zone_raw[2] = 0x01
         before = len(panel.log)
         await client.refresh()
-        assert requests(before) == ZONES_THEN_PARTITIONS  # zones first
+        assert requests(before) == ZONES  # movement: zone reads are not delayed
         assert client.zones[2].open
+        panel.zone_raw[3] = 0x01
+        before = len(panel.log)
+        await client.refresh()
+        assert requests(before) == ZONES
+        before = len(panel.log)
+        await client.refresh()  # zones settled: now the partitions ("ready")
+        assert requests(before) == ZONES_THEN_PARTITIONS  # zones first
+        before = len(panel.log)
+        await client.refresh()
+        assert requests(before) == ZONES
 
         before = len(panel.log)
         client._partitions_due = True  # set by request_refresh() on notifications
@@ -569,6 +580,26 @@ async def test_two_lost_multi_zone_replies_keep_multi_zone(monkeypatch):
         await client.refresh()
         assert client.connected
         assert not client._single_zone_mode
+    finally:
+        await client.stop()
+        await panel.stop()
+
+
+@pytest.mark.asyncio
+async def test_unanswered_counter_reset_by_any_reply(monkeypatch):
+    """Any answered request resets the unanswered counter, but the same request
+    failing again and again still drops the session."""
+    import itv2.client as c
+
+    panel = FakePanel()
+    await panel.start()
+    client = AbsolutaClient("127.0.0.1", "1234", panel.port, poll_interval=30, load_labels=False)
+    await client.start()
+    try:
+        client._unanswered = 2
+        await client.refresh()
+        assert client._unanswered == 0
+        assert c.MAX_UNANSWERED == 3
     finally:
         await client.stop()
         await panel.stop()
