@@ -21,6 +21,7 @@ from homeassistant import config_entries  # noqa: E402
 from homeassistant.const import CONF_HOST, CONF_PORT  # noqa: E402
 from homeassistant.core import HomeAssistant  # noqa: E402
 from homeassistant.data_entry_flow import FlowResultType  # noqa: E402
+from homeassistant.helpers import entity_registry as er  # noqa: E402
 from pytest_homeassistant_custom_component.common import MockConfigEntry  # noqa: E402
 
 from custom_components.bentel_absoluta.const import CONF_PIN, DOMAIN  # noqa: E402
@@ -105,6 +106,8 @@ async def test_setup_and_control(hass: HomeAssistant, panel: FakePanel) -> None:
     assert states["binary_sensor.bentel_absoluta_42_zona_01"].state == "off"
     assert states["switch.bentel_absoluta_42_uscita_04"].state == "off"
     assert "button.bentel_absoluta_42_uscita_52" in states  # remote command 2 (label offset 50)
+    off = er.async_get(hass).async_get("button.bentel_absoluta_42_uscita_52_off")
+    assert off is not None and off.disabled_by is not None  # OFF button disabled by default
     assert states["binary_sensor.bentel_absoluta_42_connection"].state == "on"
     assert "button.bentel_absoluta_42_arm_mode_modo_01" in states
 
