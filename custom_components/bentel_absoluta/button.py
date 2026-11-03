@@ -44,6 +44,18 @@ async def async_setup_entry(
                 placeholders={"number": str(n)},
             )
         )
+        # Deactivate: useful only for latched actions (e.g. an output kept on by
+        # the remote command), so disabled by default. No state is available.
+        entities.append(
+            BentelButton(
+                entry,
+                f"remote_command_{n}_off",
+                lambda c, n=n: c.trigger_remote_command(n, on=False),
+                translation_key="remote_command_off" if label else "remote_command_number_off",
+                placeholders={"name": label or "", "number": str(n)},
+                enabled_default=False,
+            )
+        )
     # Arming-mode buttons bypass the code check, so skip them if a code is required
     arm_modes = {} if entry.options.get(CONF_REQUIRE_CODE) else ARM_MODES
     for letter, mode in arm_modes.items():
