@@ -111,6 +111,12 @@
       "remote_command": {
         "name": "Remote command {number}"
       },
+      "remote_command_off": {
+        "name": "{name} OFF"
+      },
+      "remote_command_number_off": {
+        "name": "Remote command {number} OFF"
+      },
       "arm_mode": {
         "name": "Arm mode {mode}"
       },
