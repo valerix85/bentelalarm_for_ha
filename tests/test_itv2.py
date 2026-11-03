@@ -603,3 +603,19 @@ async def test_unanswered_counter_reset_by_any_reply(monkeypatch):
     finally:
         await client.stop()
         await panel.stop()
+
+
+@pytest.mark.asyncio
+async def test_remote_command_on_and_off():
+    """Remote command n is output 56 + n; it can be deactivated too (0902 type 02)."""
+    panel = FakePanel()
+    client = await _started(panel, load_labels=False)
+    try:
+        before = len(panel.log)
+        await client.trigger_remote_command(2)
+        await client.trigger_remote_command(2, on=False)
+        sent = [p for cmd, p in panel.log[before:] if cmd == Cmd.COMMAND_OUTPUT]
+        assert [p[1:] for p in sent] == [b"\x00\x01\x3a\x01", b"\x00\x01\x3a\x02"]
+    finally:
+        await client.stop()
+        await panel.stop()
