@@ -1422,10 +1422,12 @@ class AbsolutaClient:
             self.outputs_on.discard(output)
         self._notify()
 
-    async def trigger_remote_command(self, number: int) -> None:
+    async def trigger_remote_command(self, number: int, on: bool = True) -> None:
+        """Activate (or deactivate) a remote command. ITv2 gives no state for
+        remote commands: deactivating matters only for latched actions."""
         await self._request(
             Cmd.COMMAND_OUTPUT,
-            msg.build_command_output(REMOTE_COMMAND_OUTPUT_OFFSET + number, True),
+            msg.build_command_output(REMOTE_COMMAND_OUTPUT_OFFSET + number, on),
         )
 
     async def user_activity(self, activity: int) -> None:
