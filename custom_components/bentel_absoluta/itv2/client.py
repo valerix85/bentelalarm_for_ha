@@ -91,6 +91,9 @@ MAX_RECONNECT_DELAY = 60.0
 # reply now and then while the link is fine.
 MAX_UNANSWERED = 3
 EVENTS_READ = 5
+EVENTS_MAX_FAILURES = 3
+EVENTS_RETRY_INTERVAL = 300.0
+RESP_COMMAND_TIMED_OUT = 0x19
 # Partition status is notified by the ABS-IP: polled only as a safety net
 PARTITION_POLL_INTERVAL = 10.0
 # Status requests use a timeout adapted to the panel's reply times (twice the
@@ -1125,16 +1128,33 @@ class AbsolutaClient:
         self._last_events_check = time.monotonic()
         try:
             latest = await self.read_events(0, EVENTS_READ)
-        except CommandFailed as err:
-            _LOGGER.info("Event log not available on this panel (%s)", err)
-            self._events_supported = False
-            return
-        except (TimeoutError, ValueError) as err:
+        except (CommandFailed, TimeoutError, ValueError) as err:
+            # A refusal before any successful read means "not supported"; once the
+            # log has been read, errors are transient (e.g. 0x19 "command timed
+            # out" seen now and then on an Absoluta Plus 48, issue #11).
+            if (
+                isinstance(err, CommandFailed)
+                and err.code != RESP_COMMAND_TIMED_OUT
+                and not self._events_initialized
+            ):
+                _LOGGER.info("Event log not available on this panel (%s)", err)
+                self._events_supported = False
+                return
             self._events_failures += 1
             _LOGGER.debug("Event log read failed (%d): %s", self._events_failures, err)
-            if self._events_failures >= 3:
-                _LOGGER.info("Event log does not answer, not reading it anymore")
-                self._events_supported = False
+            if self._events_failures >= EVENTS_MAX_FAILURES:
+                if not self._events_initialized:
+                    _LOGGER.info("Event log does not answer, not reading it anymore")
+                    self._events_supported = False
+                elif self._events_failures == EVENTS_MAX_FAILURES:
+                    _LOGGER.info(
+                        "Event log read failed %d times in a row, retrying every %d s",
+                        self._events_failures,
+                        int(EVENTS_RETRY_INTERVAL),
+                    )
+                if self._events_initialized:
+                    # Back off: next read after EVENTS_RETRY_INTERVAL
+                    self._last_events_check += EVENTS_RETRY_INTERVAL - EVENTS_INTERVAL
             return
         self._events_failures = 0
         if not latest:
