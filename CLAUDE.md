@@ -100,3 +100,7 @@ The repository is English-only (code, comments, docs); Italian is used only in
   0.98 s / max 2.5 s; lost replies never arrive late.
 - One config entry per ABS-IP host: the config flow aborts on an already configured host before
   connecting (the ABS-IP accepts a single ITv2 session).
+- Event log (0.3.23, issue #11): an Absoluta Plus 48 (ABS-IP 02.00.10.01) now and then answers
+  0101 with 0502 0x19 "command timed out" (~2.3 s later) after hundreds of good reads. A refusal
+  disables the log only if it was never read in this client's lifetime (and not for 0x19); after
+  a successful read every error is transient: 3 in a row only space the reads to every 300 s.
