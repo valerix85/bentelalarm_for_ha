@@ -42,6 +42,10 @@ class FakePanel:
         # Answer every zone request with the status of all zones from 1
         # (seen on an Absoluta Plus 48: always "01 01 01 30")
         self.full_zone_reply = False
+        # Next N event log reads (0101) are refused with this 0502 code
+        # (seen on an Absoluta Plus 48: 0x19 "command timed out" now and then)
+        self.event_read_errors = 0
+        self.event_read_error_code = 0x19
         self.pin = pin
         self.zones = list(zones)
         self.partitions = list(partitions)
@@ -286,6 +290,10 @@ class FakePanel:
         elif cmd == Cmd.USER_ACTIVITY:
             self._respond(p[0])
         elif cmd == Cmd.EVENT_BUFFER_READ:
+            if self.event_read_errors:
+                self.event_read_errors -= 1
+                self._respond(p[0], self.event_read_error_code)
+                return
             first = (p[2] << 8) | p[3]
             count = (p[4] << 8) | p[5]
             records = self.event_log[first : first + count]
