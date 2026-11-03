@@ -619,3 +619,44 @@ async def test_remote_command_on_and_off():
     finally:
         await client.stop()
         await panel.stop()
+
+
+@pytest.mark.asyncio
+async def test_event_log_survives_transient_errors():
+    """Once the event log has been read, a refusal (0x19) is transient: it never
+    disables the log, three in a row only slow the reads down."""
+    import itv2.client as c
+
+    panel = FakePanel()
+    client = await _started(panel, load_labels=False)
+    try:
+        assert client._events_initialized
+        panel.event_read_errors = 1
+        await client.check_events()
+        assert client._events_supported
+        panel.log_event(0x004D)  # arming OK
+        await client.check_events()
+        assert client.last_events[0].text() == "Inser. eseguito"
+        assert client._events_failures == 0
+
+        panel.event_read_errors = c.EVENTS_MAX_FAILURES
+        for _ in range(c.EVENTS_MAX_FAILURES):
+            await client.check_events()
+        assert client._events_supported
+        assert client._last_events_check > asyncio.get_running_loop().time()  # backing off
+    finally:
+        await client.stop()
+        await panel.stop()
+
+
+@pytest.mark.asyncio
+async def test_event_log_refused_from_start_is_disabled():
+    panel = FakePanel()
+    panel.event_read_errors = 100
+    panel.event_read_error_code = 0x17  # function not available
+    client = await _started(panel, load_labels=False)
+    try:
+        assert not client._events_supported
+    finally:
+        await client.stop()
+        await panel.stop()
