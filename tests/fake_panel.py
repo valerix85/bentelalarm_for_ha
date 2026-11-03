@@ -261,7 +261,8 @@ class FakePanel:
         elif cmd == Cmd.COMMAND_OUTPUT:
             seq = p[0]
             out, off = m.read_var(p, 2)
-            (self.outputs_on.add if p[off] == 1 else self.outputs_on.discard)(out)
+            if out <= 50:  # 57..88 are remote commands: no state
+                (self.outputs_on.add if p[off] == 1 else self.outputs_on.discard)(out)
             self._respond(seq)
             self._send(self._outputs())
         elif cmd == Cmd.SINGLE_ZONE_BYPASS_WRITE:
