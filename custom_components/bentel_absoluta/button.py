@@ -23,6 +23,12 @@ ARM_MODES = {
     "C": ArmMode.CUSTOM_C,
     "D": ArmMode.CUSTOM_D,
 }
+FORCED_ARM_MODES = {
+    "A": ArmMode.FORCE_CUSTOM_A,
+    "B": ArmMode.FORCE_CUSTOM_B,
+    "C": ArmMode.FORCE_CUSTOM_C,
+    "D": ArmMode.FORCE_CUSTOM_D,
+}
 
 
 async def async_setup_entry(
@@ -68,6 +74,18 @@ async def async_setup_entry(
                 translation_key="arm_mode",
                 placeholders={"mode": label or letter},
                 enabled_default=bool(label),
+            )
+        )
+        # Forced: the panel arms even with open zones that can be bypassed, as
+        # the Bentel app does after its confirmation. Disabled by default.
+        entities.append(
+            BentelButton(
+                entry,
+                f"arm_mode_{letter.lower()}_forced",
+                lambda c, mode=FORCED_ARM_MODES[letter]: c.arm(0, mode),
+                translation_key="arm_mode_forced",
+                placeholders={"mode": label or letter},
+                enabled_default=False,
             )
         )
     entities.append(

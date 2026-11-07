@@ -693,3 +693,21 @@ async def test_reconnect_waits_after_session_taken_over(monkeypatch, caplog):
     finally:
         await client.stop()
         await panel.stop()
+
+
+@pytest.mark.asyncio
+async def test_forced_custom_arm_mode_with_open_zone():
+    """A custom arm mode is refused (0x01) with an open zone; its forcing
+    variant (0x8D..0x90, Usage Guide 0900) arms anyway (issue #14)."""
+    panel = FakePanel()
+    client = await _started(panel, load_labels=False)
+    try:
+        panel.zone_raw[1] = 0x01  # open zone
+        with pytest.raises(CommandFailed):
+            await client.arm(1, ArmMode.CUSTOM_A)
+        await client.arm(1, ArmMode.FORCE_CUSTOM_A)
+        sent = [p for cmd, p in panel.log if cmd == Cmd.PARTITION_ARM]
+        assert sent[-1][1:] == b"\x01\x01\x8d"
+    finally:
+        await client.stop()
+        await panel.stop()

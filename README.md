@@ -89,7 +89,7 @@ Available from the integration's **Configure** button:
 | **Connection** (binary sensor) | State of the ITv2 session. |
 | **Last event** (sensor) | Latest entry of the panel event log, e.g. *Zone alarm – Kitchen window*; the last events are in the `recent` attribute. |
 | **Output** / **Zone bypass** (switch) | Programmable outputs enabled for the user; bypass of each zone (takes a few seconds, see below). |
-| **Remote command**, **Arm mode A–D**, **Clear alarm memory**, **Clear alarms, faults and tampers**, **Sync panel clock** (button) | Each remote command also has a **… OFF** button, disabled by default: it deactivates the command, which is useful when the command keeps an output on (latched action). ITv2 reports no state for remote commands. |
+| **Remote command**, **Arm mode A–D**, **Clear alarm memory**, **Clear alarms, faults and tampers**, **Sync panel clock** (button) | Each arm mode A–D also has a **(forced)** button, disabled by default: the panel arms even with open zones that can be bypassed, like the Bentel app after its confirmation (otherwise the panel refuses with error 0x01). Each remote command also has a **… OFF** button, disabled by default: it deactivates the command, which is useful when the command keeps an output on (latched action). ITv2 reports no state for remote commands. |
 
 Per-partition *troubles* and *ready* sensors are also available, disabled by default.
 

@@ -109,3 +109,7 @@ The repository is English-only (code, comments, docs); Italian is used only in
   session is open. A user saw panel restarts ("Riavvio Programma" / BPI reset) ~30-40 s after
   such take-overs, while the client was retrying; cause not proven. The client now waits
   SESSION_ENDED_DELAY (60 s) after a 060B and SESSION_BUSY_DELAY (120 s) after each 0x09.
+- Forced custom arm modes (0.3.25, issue #14, Absoluta 48 fw 4.30.25): a custom mode (0x0D..0x10)
+  is refused with 0502 0x01 when open zones would need a bypass; the Bentel app asks for a
+  confirmation and then arms. The Usage Guide lists "Forcing customized Arming Mode A..D" =
+  0x8D..0x90: exposed as "Arm mode X (forced)" buttons, disabled by default.

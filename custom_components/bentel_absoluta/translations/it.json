@@ -120,6 +120,9 @@
       "arm_mode": {
         "name": "Inserimento modo {mode}"
       },
+      "arm_mode_forced": {
+        "name": "Inserimento modo {mode} (forzato)"
+      },
       "clear_alarm_memory": {
         "name": "Cancella memoria allarmi"
       },

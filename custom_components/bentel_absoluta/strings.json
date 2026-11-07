@@ -120,6 +120,9 @@
       "arm_mode": {
         "name": "Arm mode {mode}"
       },
+      "arm_mode_forced": {
+        "name": "Arm mode {mode} (forced)"
+      },
       "clear_alarm_memory": {
         "name": "Clear alarm memory"
       },

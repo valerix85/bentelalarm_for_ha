@@ -92,6 +92,12 @@ class ArmMode(IntEnum):
     FORCE_STAY = 0x81
     FORCE_AWAY = 0x82
     FORCE_INSTANT_STAY = 0x87
+    # "Forcing customized Arming Mode A..D" (Usage Guide, 0900): like the app's
+    # confirmation when open zones can be bypassed
+    FORCE_CUSTOM_A = 0x8D
+    FORCE_CUSTOM_B = 0x8E
+    FORCE_CUSTOM_C = 0x8F
+    FORCE_CUSTOM_D = 0x90
 
 
 class UserActivity(IntEnum):

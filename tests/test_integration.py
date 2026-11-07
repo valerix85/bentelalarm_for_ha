@@ -110,6 +110,8 @@ async def test_setup_and_control(hass: HomeAssistant, panel: FakePanel) -> None:
     assert off is not None and off.disabled_by is not None  # OFF button disabled by default
     assert states["binary_sensor.bentel_absoluta_42_connection"].state == "on"
     assert "button.bentel_absoluta_42_arm_mode_modo_01" in states
+    forced = er.async_get(hass).async_get("button.bentel_absoluta_42_arm_mode_modo_01_forced")
+    assert forced is not None and forced.disabled_by is not None  # disabled by default
 
     await hass.services.async_call(
         "alarm_control_panel",
