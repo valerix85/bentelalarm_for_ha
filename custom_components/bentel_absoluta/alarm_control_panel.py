@@ -24,9 +24,9 @@ from .const import (
     ARM_MODE_NIGHT,
     CONF_ARM_MODES,
     CONF_PIN,
-    CONF_REQUIRE_CODE,
     DEFAULT_ARM_MODES,
     DOMAIN,
+    code_required,
 )
 from .entity import BentelEntity
 from .itv2.client import CommandFailed, ITv2Error, PartiallyArmed
@@ -85,8 +85,9 @@ class BentelPartition(BentelEntity, AlarmControlPanelEntity):
             self._attr_translation_key = "partition"
             self._attr_translation_placeholders = {"number": str(partition)}
         self._pin = entry.data[CONF_PIN]
-        self._require_code = entry.options.get(CONF_REQUIRE_CODE, False)
-        self._attr_code_arm_required = self._require_code
+        self._require_code = code_required(entry.options, arm=False)
+        self._require_code_arm = code_required(entry.options, arm=True)
+        self._attr_code_arm_required = self._require_code_arm
         self._attr_code_format = CodeFormat.NUMBER if self._require_code else None
         modes = entry.options.get(CONF_ARM_MODES, DEFAULT_ARM_MODES)
         features = AlarmControlPanelEntityFeature(0)
@@ -130,8 +131,9 @@ class BentelPartition(BentelEntity, AlarmControlPanelEntity):
             "raw_status": status.raw.hex(),
         }
 
-    def _check_code(self, code: str | None) -> None:
-        if self._require_code and code != self._pin:
+    def _check_code(self, code: str | None, *, arm: bool = True) -> None:
+        required = self._require_code_arm if arm else self._require_code
+        if required and code != self._pin:
             raise ServiceValidationError(translation_domain=DOMAIN, translation_key="invalid_code")
 
     async def _run(self, coro) -> None:
@@ -186,7 +188,7 @@ class BentelPartition(BentelEntity, AlarmControlPanelEntity):
             ) from err
 
     async def async_alarm_disarm(self, code: str | None = None) -> None:
-        self._check_code(code)
+        self._check_code(code, arm=False)
         await self._run(self.client.disarm(self.partition))
 
     async def async_alarm_arm_away(self, code: str | None = None) -> None:

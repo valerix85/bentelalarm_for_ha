@@ -76,7 +76,8 @@ Available from the integration's **Configure** button:
 |---|---|---|
 | Status polling interval | 5 s | The ABS-IP does not push zone open/closed changes, so zones are read at this interval (1–60 s). Partition status is pushed by the panel on alarms and faults, so it is read after a notification or a command, once the zones stop changing (for "ready to arm"), and at least every 10 s. For zones driving lights (PIR) 1–2 s works well; lower values mean more traffic to the ABS-IP. |
 | Arm modes | Away | Add *Home* (stay) and *Night* (instant stay) only if you use them on the panel. *Forced* arms even with open zones, which get bypassed; it appears in Home Assistant as "custom bypass". |
-| Require code | Off | Home Assistant asks for the PIN to arm/disarm. Arming mode buttons and zone bypass switches are not created. |
+| Require code to disarm | Off | Home Assistant asks for the PIN to disarm. Zone bypass switches are not created. |
+| Also require the code to arm | On | Only used with the option above. On: the PIN is asked to arm too and the arming mode buttons are not created. Off: arming needs no PIN, so automations and the *Arm mode A–D* buttons can arm, while disarming stays protected. |
 
 ## Entities
 

@@ -12,7 +12,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
 from . import BentelConfigEntry
-from .const import CONF_REQUIRE_CODE, DOMAIN
+from .const import DOMAIN, code_required
 from .entity import BentelEntity
 from .itv2.client import AbsolutaClient, ITv2Error
 from .itv2.const import ArmMode, UserActivity
@@ -62,8 +62,8 @@ async def async_setup_entry(
                 enabled_default=False,
             )
         )
-    # Arming-mode buttons bypass the code check, so skip them if a code is required
-    arm_modes = {} if entry.options.get(CONF_REQUIRE_CODE) else ARM_MODES
+    # Arming-mode buttons cannot ask for a code: skip them if one is required to arm
+    arm_modes = {} if code_required(entry.options, arm=True) else ARM_MODES
     for letter, mode in arm_modes.items():
         label = client.arming_mode_labels.get(letter)
         entities.append(

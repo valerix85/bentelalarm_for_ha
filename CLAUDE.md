@@ -113,3 +113,6 @@ The repository is English-only (code, comments, docs); Italian is used only in
   is refused with 0502 0x01 when open zones would need a bypass; the Bentel app asks for a
   confirmation and then arms. The Usage Guide lists "Forcing customized Arming Mode A..D" =
   0x8D..0x90: exposed as "Arm mode X (forced)" buttons, disabled by default.
+- Code options (0.3.26, issue #15): `require_code` = PIN to disarm (zone bypass switches hidden);
+  `require_code_arm` = PIN to arm too (arm mode buttons hidden), only used with `require_code`.
+  Entries without `require_code_arm` (before 0.3.26) behave as before (code for both).

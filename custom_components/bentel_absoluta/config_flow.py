@@ -24,6 +24,7 @@ from .const import (
     CONF_PIN,
     CONF_POLL_INTERVAL,
     CONF_REQUIRE_CODE,
+    CONF_REQUIRE_CODE_ARM,
     DEFAULT_ARM_MODES,
     DEFAULT_POLL_INTERVAL,
     DEFAULT_PORT,
@@ -215,6 +216,7 @@ class BentelOptionsFlow(OptionsFlow):
                     )
                 ),
                 vol.Required(CONF_REQUIRE_CODE, default=False): selector.BooleanSelector(),
+                vol.Required(CONF_REQUIRE_CODE_ARM, default=True): selector.BooleanSelector(),
             }
         )
         return self.async_show_form(

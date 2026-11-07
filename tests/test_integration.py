@@ -345,3 +345,52 @@ async def test_new_features(hass: HomeAssistant, panel: FakePanel) -> None:
 
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
+
+
+@pytest.mark.parametrize(
+    ("options", "arm_code", "disarm_code", "buttons", "bypass"),
+    [
+        ({}, False, False, True, True),
+        ({"require_code": True}, True, True, False, False),  # entries before 0.3.26
+        ({"require_code": True, "require_code_arm": True}, True, True, False, False),
+        ({"require_code": True, "require_code_arm": False}, False, True, True, False),
+    ],
+)
+async def test_require_code_options(
+    hass: HomeAssistant, panel: FakePanel, options, arm_code, disarm_code, buttons, bypass
+) -> None:
+    """Code for disarm only (issue #15): arming and arm mode buttons need no PIN,
+    disarm does, zone bypass switches stay hidden."""
+    from homeassistant.exceptions import ServiceValidationError
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="00:03:4f:06:00:03",
+        data={CONF_HOST: "127.0.0.1", CONF_PORT: panel.port, CONF_PIN: "1234"},
+        options={"poll_interval": 5, "arm_modes": ["away"], **options},
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    eid = "alarm_control_panel.bentel_absoluta_42_area_02"
+    attrs = hass.states.get(eid).attributes
+    assert attrs["code_arm_required"] is arm_code
+    assert (attrs["code_format"] is not None) is disarm_code
+    assert (
+        "button.bentel_absoluta_42_arm_mode_modo_01" in hass.states.async_entity_ids()
+    ) is buttons
+    has_bypass = any(
+        e.startswith("switch.") and "bypass" in e for e in hass.states.async_entity_ids()
+    )
+    assert has_bypass is bypass
+    if disarm_code:
+        with pytest.raises(ServiceValidationError):
+            await hass.services.async_call(
+                "alarm_control_panel", "alarm_disarm", {"entity_id": eid}, blocking=True
+            )
+    if not arm_code:
+        await hass.services.async_call(
+            "alarm_control_panel", "alarm_arm_away", {"entity_id": eid}, blocking=True
+        )
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()

@@ -11,7 +11,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import BentelConfigEntry
-from .const import CONF_REQUIRE_CODE, DOMAIN
+from .const import DOMAIN, code_required
 from .entity import BentelEntity
 from .itv2.client import ITv2Error
 
@@ -23,9 +23,9 @@ async def async_setup_entry(
 ) -> None:
     client = entry.runtime_data
     entities: list[SwitchEntity] = [BentelOutput(entry, n) for n in client.outputs]
-    # Bypassing a zone lowers protection: like the arming-mode buttons it cannot
-    # ask for a code, so it is not offered when a code is required.
-    if not entry.options.get(CONF_REQUIRE_CODE):
+    # Bypassing a zone lowers protection and cannot ask for a code: it is not
+    # offered when a code is required to disarm.
+    if not code_required(entry.options, arm=False):
         entities += [BentelZoneBypass(entry, z) for z in client.user_zones]
     async_add_entities(entities)
 

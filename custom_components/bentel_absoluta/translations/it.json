@@ -50,12 +50,14 @@
         "title": "Opzioni",
         "data": {
           "poll_interval": "Intervallo di lettura dello stato",
-          "require_code": "Richiedi il codice per inserire/disinserire da Home Assistant",
+          "require_code": "Richiedi il codice per disinserire da Home Assistant",
+          "require_code_arm": "Richiedi il codice anche per inserire",
           "arm_modes": "Modalità di inserimento proposte per ogni area"
         },
         "data_description": {
           "poll_interval": "Lo stato aperto/chiuso delle zone non viene notificato dalla centrale e viene letto a questo intervallo (funziona anche da keep-alive). 1-2 s per zone che accendono luci.",
-          "require_code": "Se attivo, le entità di allarme chiedono il PIN utente e i pulsanti delle modalità di inserimento e gli interruttori di esclusione zona non vengono creati.",
+          "require_code": "Se attivo, le entità di allarme chiedono il PIN utente per disinserire e gli interruttori di esclusione zona non vengono creati.",
+          "require_code_arm": "Usato solo se il codice è richiesto per disinserire. Se attivo il PIN è chiesto anche per inserire e i pulsanti delle modalità di inserimento non vengono creati; se disattivo l'inserimento (anche da automazioni e dai pulsanti dei modi) non richiede il PIN.",
           "arm_modes": "Le aree Absoluta di solito sono solo inserite o disinserite (Fuori casa = inserimento totale). Attiva In casa (parziale) e Notte (parziale istantaneo) solo se le usi sulla centrale."
         }
       }

@@ -50,12 +50,14 @@
         "title": "Options",
         "data": {
           "poll_interval": "Status polling interval",
-          "require_code": "Require the code to arm/disarm from Home Assistant",
+          "require_code": "Require the code to disarm from Home Assistant",
+          "require_code_arm": "Also require the code to arm",
           "arm_modes": "Arm modes offered on each partition"
         },
         "data_description": {
           "poll_interval": "Zone open/closed state is not pushed by the panel and is polled at this interval (it also works as keep-alive). 1-2 s for zones driving lights.",
-          "require_code": "When enabled the alarm panel entities ask for the user PIN, and the arming-mode buttons and zone bypass switches are not created.",
+          "require_code": "When enabled the alarm panel entities ask for the user PIN to disarm, and the zone bypass switches are not created.",
+          "require_code_arm": "Only used when the code is required to disarm. When enabled the PIN is asked to arm too and the arming-mode buttons are not created; when disabled arming (also from automations and the arm mode buttons) needs no PIN.",
           "arm_modes": "Absoluta partitions are normally just armed or disarmed (Away). Enable Home (stay) and Night (instant stay) only if you use them on the panel."
         }
       }
