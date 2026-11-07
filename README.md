@@ -125,8 +125,10 @@ automation:
   in Home Assistant. To switch to another user's PIN use *Reconfigure* on the existing entry;
   two entries for the same panel keep disconnecting each other.
 - ITv2 has the **lowest priority**: when BOSS or the Bentel mobile app connects, the panel
-  closes the Home Assistant session. The integration reconnects by itself (retrying from 10 s
-  up to every minute).
+  closes the Home Assistant session. The integration reconnects by itself: it waits 1 minute
+  after the panel ends the session, and while BOSS or the app is still connected (the panel
+  answers "system is locked out") it retries every 2 minutes. After a network loss it retries
+  from 10 s up to every minute.
 - **Zone bypass** is applied by the panel when the session ends, so the integration
   reconnects right after it: each bypass takes a few seconds.
 - **Arming refused**: if a zone is open or something blocks arming, Home Assistant shows an

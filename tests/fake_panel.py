@@ -36,6 +36,9 @@ class FakePanel:
         # Next N connections: answer the client's 060A, then end the session
         # (seen on a real ABS-IP right after a lost connection)
         self.end_session_on_open = 0
+        # Next N Open Session refused with command error 0x09 (system is locked
+        # out), as when BOSS or the mobile app holds the session
+        self.locked_out_on_open = 0
         # Next N command requests (0800) are acknowledged but never answered
         # (seen on ABS-IP 02.00.10: a reply goes missing now and then)
         self.drop_replies = 0
@@ -158,6 +161,10 @@ class FakePanel:
             self._send(cmd_bytes(Cmd.COMMAND_ERROR) + cmd_bytes(cmd) + b"\x07")
             return
         if cmd == Cmd.OPEN_SESSION:
+            if self.locked_out_on_open:
+                self.locked_out_on_open -= 1
+                self._send(cmd_bytes(Cmd.COMMAND_ERROR) + cmd_bytes(cmd) + b"\x09")
+                return
             self._respond(p[0])
             if self.end_session_on_open:
                 self.end_session_on_open -= 1

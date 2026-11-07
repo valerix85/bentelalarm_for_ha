@@ -11,7 +11,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parents[1] / "custom_components" / "bentel_absoluta"))
 sys.path.insert(0, str(Path(__file__).parent))
 
-from fake_panel import FakePanel  # noqa: E402
+from fake_panel import FakePanel, cmd_bytes  # noqa: E402
 from itv2 import messages as m  # noqa: E402
 from itv2.client import AbsolutaClient, AuthenticationFailed, CommandFailed  # noqa: E402
 from itv2.const import ArmMode, Cmd  # noqa: E402
@@ -657,6 +657,39 @@ async def test_event_log_refused_from_start_is_disabled():
     client = await _started(panel, load_labels=False)
     try:
         assert not client._events_supported
+    finally:
+        await client.stop()
+        await panel.stop()
+
+
+@pytest.mark.asyncio
+async def test_reconnect_waits_after_session_taken_over(monkeypatch, caplog):
+    """BOSS or the mobile app takes the session (060B, then Open Session refused
+    with 0x09 "system is locked out"): wait SESSION_ENDED_DELAY before the
+    first attempt and SESSION_BUSY_DELAY between refused ones (issue #13)."""
+    import itv2.client as c
+
+    panel = FakePanel()
+    client = await _started(panel, load_labels=False)
+    try:
+        orig_sleep = asyncio.sleep
+        delays: list[float] = []
+
+        async def fake_sleep(s):
+            if s >= 1:
+                delays.append(s)
+            await orig_sleep(min(s, 0.05))
+
+        monkeypatch.setattr(c.asyncio, "sleep", fake_sleep)
+        panel.locked_out_on_open = 2
+        panel._send(cmd_bytes(Cmd.END_SESSION))  # the app connects
+        for _ in range(200):
+            await orig_sleep(0.05)
+            if client.connected and panel.connections >= 4:
+                break
+        assert client.connected
+        assert delays[:3] == [c.SESSION_ENDED_DELAY, c.SESSION_BUSY_DELAY, c.SESSION_BUSY_DELAY]
+        assert "busy with another session" in caplog.text
     finally:
         await client.stop()
         await panel.stop()

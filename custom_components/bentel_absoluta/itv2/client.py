@@ -86,6 +86,14 @@ MAX_ZONE_RUN = 64
 ARM_SETTLE_TIME = 6.0
 EVENTS_INTERVAL = 30.0
 MAX_RECONNECT_DELAY = 60.0
+# The panel ended the session (BOSS or the mobile app took over, or ABS-IP
+# restart): wait before reconnecting, so as not to knock while the other
+# session is still open (issue #13: panel restarts after app sessions).
+SESSION_ENDED_DELAY = 60.0
+# Open Session refused with "system is locked out" (0x09): another session
+# (BOSS or mobile app) is active. Retry slowly until it ends.
+SESSION_BUSY_DELAY = 120.0
+CMD_ERR_LOCKED_OUT = 0x09
 # Consecutive unanswered requests (transport ACK received, reply missing) tolerated
 # before the session is considered lost: some ABS-IP firmware (02.00.10) drops a
 # reply now and then while the link is fine.
@@ -124,6 +132,8 @@ class TcpConnectFailed(ConnectionFailed):
 
 class HandshakeFailed(ConnectionFailed):
     """TCP is up but the ITv2 handshake/login did not complete."""
+
+    busy = False  # another session (BOSS or mobile app) is active
 
     def __init__(self, message: str, *, stage: str = "") -> None:
         super().__init__(message)
@@ -270,6 +280,7 @@ class AbsolutaClient:
         self._closed_event = asyncio.Event()
         self._last_tx = 0.0
         self._single_zone_mode = False
+        self._ended_by_panel = False
         self._unanswered = 0
         self._partitions_due = True
         self._partitions_stale = False  # zones changed: read partitions once they settle
@@ -368,11 +379,17 @@ class AbsolutaClient:
         except (TimeoutError, ITv2Error, OSError) as err:
             await self._close_transport()
             detail = str(err) or type(err).__name__
-            raise HandshakeFailed(
+            failure = HandshakeFailed(
                 f"ITv2 session failed at stage '{self.stage}' "
                 f"({self.rx_packets} packets received from panel): {detail}",
                 stage=self.stage,
-            ) from err
+            )
+            failure.busy = (
+                isinstance(err, CommandFailed)
+                and err.is_command_error
+                and err.code == CMD_ERR_LOCKED_OUT
+            )
+            raise failure from err
         if discover:
             # Discovery / first poll failures must not prevent the session.
             self.stage = "discover"
@@ -480,7 +497,8 @@ class AbsolutaClient:
                 await self._close_transport()
                 if not planned:
                     self._set_connected(False)
-                backoff = 10.0
+                backoff = SESSION_ENDED_DELAY if self._ended_by_panel else 10.0
+                self._ended_by_panel = False
                 failures = 0
             if self._stopping:
                 break
@@ -503,6 +521,21 @@ class AbsolutaClient:
                 if self.on_auth_failed:
                     self.on_auth_failed()
                 return
+            except HandshakeFailed as err:
+                self._set_connected(False)
+                failures += 1
+                if err.busy:
+                    # BOSS or the mobile app is connected: don't keep knocking
+                    _LOGGER.info(
+                        "Absoluta %s is busy with another session (BOSS or mobile app), "
+                        "retrying in %d s",
+                        self.host,
+                        int(SESSION_BUSY_DELAY),
+                    )
+                    backoff = SESSION_BUSY_DELAY
+                else:
+                    self._log_reconnect_failure(failures, err)
+                    backoff = min(backoff * 2, MAX_RECONNECT_DELAY)
             except ITv2Error as err:
                 self._set_connected(False)
                 failures += 1
@@ -845,6 +878,7 @@ class AbsolutaClient:
             _LOGGER.warning(
                 "Absoluta ended the ITv2 session (BOSS or mobile app connected, or ABS-IP restarting)"
             )
+            self._ended_by_panel = True
             self._closed_event.set()
             self._fail_waiters(ConnectionFailed("session ended by panel"))
             self._refresh_requested.set()

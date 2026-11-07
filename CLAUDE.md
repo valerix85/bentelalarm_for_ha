@@ -104,3 +104,8 @@ The repository is English-only (code, comments, docs); Italian is used only in
   0101 with 0502 0x19 "command timed out" (~2.3 s later) after hundreds of good reads. A refusal
   disables the log only if it was never read in this client's lifetime (and not for 0x19); after
   a successful read every error is transient: 3 in a row only space the reads to every 300 s.
+- BOSS / mobile app taking over (0.3.24, issue #13, Absoluta 42 fw 3.60.37): the panel sends 060B,
+  then refuses Open Session with command error 0x09 "system is locked out" while the other
+  session is open. A user saw panel restarts ("Riavvio Programma" / BPI reset) ~30-40 s after
+  such take-overs, while the client was retrying; cause not proven. The client now waits
+  SESSION_ENDED_DELAY (60 s) after a 060B and SESSION_BUSY_DELAY (120 s) after each 0x09.
