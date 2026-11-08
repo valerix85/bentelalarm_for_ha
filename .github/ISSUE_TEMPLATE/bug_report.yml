@@ -24,10 +24,20 @@ body:
     validations:
       required: true
   - type: input
+    id: abs_ip_firmware
+    attributes:
+      label: ABS-IP firmware
+      description: |
+        Full version as shown in BOSS (e.g. 2.00.08). The integration diagnostics only show
+        the first two numbers (02 00). Write "unknown" if you can't check it.
+      placeholder: 2.00.08
+    validations:
+      required: true
+  - type: input
     id: integration_version
     attributes:
       label: Integration version
-      description: HACS → Bentel Absoluta, or `version` in manifest.json.
+      description: Settings → Marketplace (or HACS) → Bentel Absoluta, or `version` in manifest.json.
       placeholder: 0.3.4
     validations:
       required: true

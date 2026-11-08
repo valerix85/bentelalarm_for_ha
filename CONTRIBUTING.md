@@ -1,7 +1,9 @@
 # Contributing
 
-Thanks for helping! Bug reports from panels other than the tested Absoluta 16 are especially
-valuable: please use the issue templates and attach the diagnostics file.
+Thanks for helping! The integration has been tested on Absoluta 16, 42, 48 and Plus 48 panels
+(see *Tested hardware* in the [README](README.md)); reports from other models, panel firmware
+and ABS-IP firmware versions are especially valuable. Please use the issue templates, attach
+the diagnostics file and include the full ABS-IP firmware version shown in BOSS.
 
 ## Code structure
 

@@ -1,6 +1,6 @@
 # Bentel Absoluta for Home Assistant
 
-[![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
+[![Marketplace](https://img.shields.io/badge/Marketplace-Custom-41BDF5.svg)](https://www.home-assistant.io/integrations/marketplace/)
 [![Release](https://img.shields.io/github/v/release/valerix85/bentelalarm_for_ha)](https://github.com/valerix85/bentelalarm_for_ha/releases)
 [![Validate](https://github.com/valerix85/bentelalarm_for_ha/actions/workflows/validate.yml/badge.svg)](https://github.com/valerix85/bentelalarm_for_ha/actions/workflows/validate.yml)
 [![License](https://img.shields.io/github/license/valerix85/bentelalarm_for_ha)](LICENSE)
@@ -39,18 +39,41 @@ fully local, no cloud account, no MQTT bridge, no extra hardware.
 | Absoluta 42 + ABS-IP | 3.60.24 | ✅ Reported working by a user |
 | Absoluta 42 + ABS-IP | 3.60.27 | ✅ Reported working by a user |
 | Absoluta 42 + ABS-IP | 3.60.28 | ✅ Reported working by a user (all 42 zones) |
+| Absoluta 42 + ABS-IP 2.00.08 | 3.60.37 | ✅ Reported working by a user (all 42 zones) |
+| Absoluta 48 + ABS-IP | 4.30.25 | ✅ Reported working by a user |
 | Absoluta Plus 48 + ABS-IP | 4.30.35 | ✅ Reported working by a user |
+| Absoluta Plus 48 (B104) + ABS-IP 02.00.10.01 | 4.30.32 | ✅ Reported working by a user (poll interval 1 s) |
+
+#### ABS-IP firmware
+
+The ABS-IP firmware matters more than the panel firmware. The full version is shown in BOSS
+(the integration diagnostics only show the first two numbers, e.g. `02 00`).
+
+| ABS-IP firmware | Status |
+|---|---|
+| 2.00.08 | ✅ Works |
+| 2.00.09, 2.00.10 | ❌ On some panels status requests are not answered: no zone/partition status, reconnection every ~30 s ([#8](https://github.com/valerix85/bentelalarm_for_ha/issues/8), [#9](https://github.com/valerix85/bentelalarm_for_ha/issues/9)) |
+| 02.00.10.01 | ✅ Works from integration 0.3.17: about 0.4 % of the replies are lost and retried automatically ([#11](https://github.com/valerix85/bentelalarm_for_ha/issues/11)) |
 
 Other models and firmware versions should work but have not been tested yet: feedback is
 very welcome, please [open an issue](https://github.com/valerix85/bentelalarm_for_ha/issues/new/choose).
 
 ## Installation
 
-### HACS (recommended)
+### Marketplace (Home Assistant 2026.11 or later, recommended)
 
-[![Open your Home Assistant instance and open this repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=valerix85&repository=bentelalarm_for_ha&category=integration)
+[![Open your Home Assistant instance and open this repository.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=valerix85&repository=bentelalarm_for_ha&category=integration)
 
-Or manually: *HACS → ⋮ → Custom repositories* → add
+The button opens the repository in the Marketplace. Or manually: *Settings → Marketplace →
+Add from link*, enter `valerix85/bentelalarm_for_ha` and select *Add* (choose *Integration*
+if asked). Then install **Bentel Absoluta** and **restart Home Assistant**.
+
+If you installed it with HACS before 2026.11, Home Assistant moves it to the Marketplace
+automatically when you update: updates keep coming, nothing to do.
+
+### HACS (Home Assistant before 2026.11)
+
+Use the button above, or *HACS → ⋮ → Custom repositories* → add
 `https://github.com/valerix85/bentelalarm_for_ha` with category *Integration*.
 Then download **Bentel Absoluta** and **restart Home Assistant**.
 
@@ -171,7 +194,8 @@ automation:
    ([#8](https://github.com/valerix85/bentelalarm_for_ha/issues/8),
    [#9](https://github.com/valerix85/bentelalarm_for_ha/issues/9)). In #9 re-flashing the panel
    firmware with BOSS (settings are kept) left the ABS-IP on 2.00.08 and everything worked.
-   Check the ABS-IP firmware in BOSS before buying a new module.
+   Check the ABS-IP firmware in BOSS before buying a new module (see
+   [ABS-IP firmware](#abs-ip-firmware)).
 5. [Open an issue](https://github.com/valerix85/bentelalarm_for_ha/issues/new/choose)
    attaching both files.
 
