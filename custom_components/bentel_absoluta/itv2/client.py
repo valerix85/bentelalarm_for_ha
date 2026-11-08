@@ -100,6 +100,9 @@ CMD_ERR_LOCKED_OUT = 0x09
 MAX_UNANSWERED = 3
 EVENTS_READ = 5
 EVENTS_MAX_FAILURES = 3
+# When every record of a read is new, older ones are read too (up to this many
+# records), so that bursts of events between two reads are not skipped.
+EVENTS_CATCHUP_MAX = 30
 EVENTS_RETRY_INTERVAL = 300.0
 RESP_COMMAND_TIMED_OUT = 0x19
 # Partition status is notified by the ABS-IP: polled only as a safety net
@@ -251,6 +254,10 @@ class AbsolutaClient:
         self._pending_own_logins = 0
         self._events_initialized = False
         self._own_login_keys: set[bytes] = set()
+        # WHERE/WHO and time of this integration's latest login record: older user
+        # entries with the same WHERE/WHO are its logins of previous sessions.
+        self._own_login_sig: tuple[int, int] | None = None
+        self._own_login_time: dt.datetime | None = None
         self._events_due = True
         self._last_events_check = 0.0
         self.invalid_zone_reasons: dict[int, str] = {}
@@ -1195,6 +1202,8 @@ class AbsolutaClient:
             return
         previous = {e.key for e in self.last_events} | self._own_login_keys
         new = [e for e in latest if e.key not in previous]
+        if self._events_initialized and len(new) == len(latest) == EVENTS_READ:
+            new += await self._read_older_events(previous)
         if self._pending_own_logins:
             # Each login of this integration is logged by the panel as a "user
             # entry" (Riconosciuto Cod): hide it, one per login.
@@ -1202,12 +1211,17 @@ class AbsolutaClient:
                 if self._pending_own_logins and ev.is_user_entry(event):
                     self._own_login_keys.add(event.key)
                     self._pending_own_logins -= 1
+                    if self._own_login_time is None or (
+                        event.timestamp and event.timestamp > self._own_login_time
+                    ):
+                        self._own_login_sig = (event.where, event.who)
+                        self._own_login_time = event.timestamp
             new = [e for e in new if e.key not in self._own_login_keys]
             if len(self._own_login_keys) > 50:
                 self._own_login_keys = {e.key for e in latest} & self._own_login_keys
         first_read = not self._events_initialized
         self._events_initialized = True
-        self.last_events = [e for e in latest if e.key not in self._own_login_keys]
+        self.last_events = [e for e in latest if not self._is_own_login(e)]
         if first_read:
             new = []  # do not replay history at start-up
         for event in reversed(new):  # chronological order
@@ -1227,6 +1241,38 @@ class AbsolutaClient:
             )
         if new or first_read:
             self._notify()
+
+    def _is_own_login(self, event: ev.PanelEvent) -> bool:
+        """This integration's login, of this session or of a previous one (same
+        WHERE/WHO, not newer than the current login): e.g. after an HA restart."""
+        if event.key in self._own_login_keys:
+            return True
+        return (
+            ev.is_user_entry(event)
+            and self._own_login_sig == (event.where, event.who)
+            and event.timestamp is not None
+            and self._own_login_time is not None
+            and event.timestamp <= self._own_login_time
+        )
+
+    async def _read_older_events(self, known: set[bytes]) -> list[ev.PanelEvent]:
+        """All of the last read was new: read older records until a known one."""
+        older: list[ev.PanelEvent] = []
+        first = EVENTS_READ
+        while first < EVENTS_CATCHUP_MAX:
+            try:
+                batch = await self.read_events(first, EVENTS_READ)
+            except (CommandFailed, TimeoutError, ValueError) as err:
+                _LOGGER.debug("Reading older event log records failed: %s", err)
+                break
+            for event in batch:
+                if event.key in known:
+                    return older
+                older.append(event)
+            if len(batch) < EVENTS_READ:
+                break
+            first += EVENTS_READ
+        return older
 
     async def sync_time(self, now: dt.datetime) -> None:
         """Set the panel clock (Time and Date Write 0741). ``now`` is local time."""

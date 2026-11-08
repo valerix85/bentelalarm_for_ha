@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "custom_components" / "bentel
 sys.path.insert(0, str(Path(__file__).parent))
 
 from fake_panel import FakePanel, cmd_bytes  # noqa: E402
+from itv2 import events as ev  # noqa: E402
 from itv2 import messages as m  # noqa: E402
 from itv2.client import AbsolutaClient, AuthenticationFailed, CommandFailed  # noqa: E402
 from itv2.const import ArmMode, Cmd  # noqa: E402
@@ -710,4 +711,47 @@ async def test_forced_custom_arm_mode_with_open_zone():
         assert sent[-1][1:] == b"\x01\x01\x8d"
     finally:
         await client.stop()
+        await panel.stop()
+
+
+def test_event_zone_from_expander_where():
+    """WHERE = expander-in / on-board zones: WHO is the 0-based zone (issue #11)."""
+    rec = bytes.fromhex("6219b5680910073f0a00000001")
+    assert ev.parse_event(rec).zone == 11
+    rec = bytes.fromhex("6219b5680910070b0900000001")  # panel: no zone
+    assert ev.parse_event(rec).zone is None
+
+
+@pytest.mark.asyncio
+async def test_event_log_reads_older_records_when_all_new():
+    """More new records than one read: older ones are read until a known one."""
+    panel = FakePanel()
+    client = await _started(panel, load_labels=False)
+    logged = []
+    client.add_event_listener(lambda t, d: logged.append(d) if t == "log" else None)
+    try:
+        for zone in range(1, 9):  # 8 new records, one read gets 5
+            panel.log_event(0x4000, who=zone - 1)
+        await client.check_events()
+        assert [d["zone"] for d in logged] == list(range(1, 9))  # chronological, none lost
+    finally:
+        await client.stop()
+        await panel.stop()
+
+
+@pytest.mark.asyncio
+async def test_previous_session_login_hidden_after_restart():
+    """After an HA restart the login of the previous session (same WHERE/WHO,
+    older) is not shown as the last event (issue #11)."""
+    panel = FakePanel()
+    first = await _started(panel, load_labels=False)
+    await first.stop()
+    panel.log_event(0x004D)  # arming OK between the two sessions
+    second = await _started(panel, load_labels=False)
+    try:
+        texts = [e.text() for e in second.last_events]
+        assert "Riconosciuto Cod" not in texts
+        assert texts[0] == "Inser. eseguito"
+    finally:
+        await second.stop()
         await panel.stop()

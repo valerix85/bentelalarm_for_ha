@@ -116,3 +116,11 @@ The repository is English-only (code, comments, docs); Italian is used only in
 - Code options (0.3.26, issue #15): `require_code` = PIN to disarm (zone bypass switches hidden);
   `require_code_arm` = PIN to arm too (arm mode buttons hidden), only used with `require_code`.
   Entries without `require_code_arm` (before 0.3.26) behave as before (code for both).
+- Event log details (0.3.27, issue #11, Absoluta Plus 48): a zone alarm is logged with WHERE 0x3F
+  (expander-in 2) and WHO 0x0A for zone 11: per Appendix C, with WHERE 3E..5D (expander-in),
+  5E..65 (on-board zones) or 7B (zone fault) WHO is the 0-based zone, like WHERE 0 for the
+  ZONE_WHO codes. When all EVENTS_READ records of a read are new, older records are read too
+  (up to EVENTS_CATCHUP_MAX) until a known one, so bursts are not skipped. The integration's
+  own login ("Riconosciuto Cod", e.g. WHERE 0x0B WHO 0x09 on that panel) is recognised once per
+  login; older user entries with the same WHERE/WHO (previous sessions, e.g. before an HA
+  restart) are hidden from last_events too.

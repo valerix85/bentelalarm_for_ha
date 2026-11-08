@@ -362,7 +362,14 @@ class PanelEvent:
         WHO is the 0-based zone index (verified on an Absoluta 16, fw 3.60:
         bypassing zone 6 logs WHO 5).
         """
-        if self.where == 0 and (self.cls, self.code) in ZONE_WHO and self.who != 0xFF:
+        if self.who == 0xFF:
+            return None
+        if self.where == 0 and (self.cls, self.code) in ZONE_WHO:
+            return self.who + 1
+        # WHERE = expander-in (3E..5D), on-board zones (5E..65) or zone fault
+        # (7B): WHO is the zone (Appendix C). Seen on an Absoluta Plus 48: a zone
+        # alarm logged with WHERE 0x3F, WHO 0x0A for zone 11 (issue #11).
+        if 0x3E <= self.where <= 0x65 or self.where == 0x7B:
             return self.who + 1
         return None
 

@@ -394,8 +394,10 @@ class FakePanel:
 
     def log_event(self, event_id: int, where: int = 0, who: int = 0xFF, parts=(1,)) -> None:
         mask = m.list_to_bitmask(list(parts), 2)
+        # a distinct timestamp for every record (one second apart)
+        self._event_ts = getattr(self, "_event_ts", 0x98829A69) + 1
         rec = (
-            bytes.fromhex("98829A69")
+            self._event_ts.to_bytes(4, "big")
             + b"\x09"
             + event_id.to_bytes(2, "big")
             + bytes([where, who])
