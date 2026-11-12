@@ -93,6 +93,16 @@ SESSION_ENDED_DELAY = 60.0
 # Open Session refused with "system is locked out" (0x09): another session
 # (BOSS or mobile app) is active. Retry slowly until it ends.
 SESSION_BUSY_DELAY = 120.0
+ARM_MODE_NAMES = {
+    ArmMode.STAY: "stay",
+    ArmMode.AWAY: "away",
+    ArmMode.INSTANT_STAY: "instant_stay",
+    ArmMode.CUSTOM_A: "custom_a",
+    ArmMode.CUSTOM_B: "custom_b",
+    ArmMode.CUSTOM_C: "custom_c",
+    ArmMode.CUSTOM_D: "custom_d",
+}
+BYPASS_READY_TIMEOUT = 60.0  # wait for the session before a zone bypass
 CMD_ERR_LOCKED_OUT = 0x09
 # Consecutive unanswered requests (transport ACK received, reply missing) tolerated
 # before the session is considered lost: some ABS-IP firmware (02.00.10) drops a
@@ -233,6 +243,8 @@ class AbsolutaClient:
         self.exit_delay: set[int] = set()
         # Partitions with an accepted arm command not yet confirmed by 0812
         self.arming_requested: set[int] = set()
+        # Arm mode (0900 value) of the last arming requested by this client
+        self.arming_modes: dict[int, int] = {}
         self.entry_delay: set[int] = set()
         self.zone_labels: dict[int, str] = {}
         self.partition_labels: dict[int, str] = {}
@@ -302,6 +314,10 @@ class AbsolutaClient:
         self._background: set[asyncio.Task] = set()
         self._reply_tasks: dict[int, asyncio.Task] = {}
         self._reconnect_now = False
+        # Set while a session is fully up (login, discovery and first poll done)
+        self._session_ready = asyncio.Event()
+        # One zone bypass at a time: each one costs a log-out and a reconnection
+        self._bypass_lock = asyncio.Lock()
         self._labels_loaded = False
 
     # ------------------------------------------------------------------
@@ -418,6 +434,7 @@ class AbsolutaClient:
                     await self._close_transport()
                     raise ConnectionFailed("connection closed during discovery") from err
         self.stage = "connected"
+        self._session_ready.set()
         self._set_connected(True)
 
     async def disconnect(self) -> None:
@@ -461,6 +478,7 @@ class AbsolutaClient:
                 await asyncio.wait_for(self._writer.wait_closed(), 5)
         self._writer = None
         self._reader = None
+        self._session_ready.clear()
         self._closed_event.set()
         self._fail_waiters(ConnectionFailed("connection closed"))
 
@@ -813,6 +831,12 @@ class AbsolutaClient:
             status = msg.parse_partition_status(p)
             self.partitions.update(status)
             self.arming_requested.difference_update(status)
+            for part, st in status.items():
+                # The mode is only meaningful while arming (exit delay)
+                if part not in self.arming_requested and not (
+                    st.armed and (st.exit_delay or part in self.exit_delay)
+                ):
+                    self.arming_modes.pop(part, None)
             self._last_partition_read = time.monotonic()
             changed = True
         elif cmd == Cmd.ZONE_STATUS:
@@ -1435,7 +1459,9 @@ class AbsolutaClient:
             ) from err
         # The panel accepted the command: show the exit delay right away,
         # the real status follows with the 0812 notification / next poll.
-        self.arming_requested.update(self._targets(partition))
+        for part in self._targets(partition):
+            self.arming_requested.add(part)
+            self.arming_modes[part] = int(mode)
         self._notify()
         self.request_refresh()
 
@@ -1444,6 +1470,33 @@ class AbsolutaClient:
             p
             for p in self.user_partitions
             if p in self.exit_delay or (p in self.partitions and self.partitions[p].armed)
+        ]
+
+    def arming_mode(self, partition: int) -> tuple[str, bool] | None:
+        """Arm mode in progress for a partition and whether it is a forced one.
+
+        From the command sent by this client; for an arming started elsewhere
+        (keypad, app) only stay / away / night, from the 0812 flags.
+        """
+        mode = self.arming_modes.get(partition)
+        if mode is not None:
+            name = ARM_MODE_NAMES.get(mode & 0x7F)
+            return (name, bool(mode & 0x80)) if name else None
+        st = self.partitions.get(partition)
+        if st is not None and st.armed and (st.exit_delay or partition in self.exit_delay):
+            for name in ("away", "stay", "night"):
+                if getattr(st, name):
+                    return name, False
+        return None
+
+    def bypassed_zones(self, partition: int = 0) -> list[int]:
+        """Bypassed zones (of one partition, when known). Zones above 16 on an
+        Absoluta 16 have no status over ITv2, so they can never be listed."""
+        zones = self.partition_zones.get(partition) if partition else None
+        return [
+            z
+            for z, st in sorted(self.zones.items())
+            if st.bypassed and (zones is None or z in zones)
         ]
 
     async def _armed_after_refusal(self, armed_before: set[int]) -> list[int]:
@@ -1491,7 +1544,22 @@ class AbsolutaClient:
         3.60.37). So: write, Exit Access Level (0401), then an immediate,
         planned reconnection handled by the supervisor (no error, no
         "unavailable" flicker).
+
+        Bypasses are serialised and wait for the session to be fully up: a
+        second bypass sent right after the reconnection (toggling a switch on
+        and off) would log out in the middle of the discovery, the ABS-IP
+        would drop the session, the entities would turn unavailable and the
+        change could be lost (issue #17).
         """
+        async with self._bypass_lock:
+            if self._supervisor is not None and not self._session_ready.is_set():
+                try:
+                    await asyncio.wait_for(self._session_ready.wait(), BYPASS_READY_TIMEOUT)
+                except TimeoutError as err:
+                    raise ConnectionFailed("panel not connected") from err
+            await self._set_zone_bypass(zone, bypass)
+
+    async def _set_zone_bypass(self, zone: int, bypass: bool) -> None:
         await self._request(
             Cmd.SINGLE_ZONE_BYPASS_WRITE,
             b"\x00" + msg.var_bytes(zone) + bytes([0x01 if bypass else 0x00]),
@@ -1504,6 +1572,7 @@ class AbsolutaClient:
         self._reconnect_now = True
         with contextlib.suppress(ITv2Error, TimeoutError):
             await self._request(Cmd.EXIT_ACCESS_LEVEL, b"\x00", timeout=3)
+        self._session_ready.clear()
         if self._supervisor is None:
             # Not running under the supervisor (e.g. scripts): reconnect inline
             await self._close_transport()
