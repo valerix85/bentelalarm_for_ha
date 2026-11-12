@@ -107,7 +107,7 @@ Available from the integration's **Configure** button:
 | Entity | Notes |
 |---|---|
 | **All partitions** (alarm panel) | Arms/disarms every partition at once. When only some partitions are armed the state is *armed custom bypass* and the `armed_partitions` / `disarmed_partitions` attributes tell which. |
-| **Partition** (alarm panel) | One per partition. States include *arming* (exit delay), *pending* (entry delay) and *triggered*. While *arming*, the `arming_mode` attribute (`away`, `stay`, `custom_a`…) and `arming_forced` tell which arming is in progress; `bypassed_zone_names` lists the bypassed zones (zones 1–16 only on an Absoluta 16: the panel reports no status above 16), `bypassed_zones` is just a true/false flag. |
+| **Partition** (alarm panel) | One per partition. States include *arming* (exit delay), *pending* (entry delay) and *triggered*. The `arming_mode` attribute (`away`, `stay`, `custom_a`…`custom_d`, `instant_stay`) and `arming_forced` tell how the partition was armed (also when armed from a keypad, mode only) and are empty when disarmed. `bypassed_zone_names` lists the bypassed zones, including those excluded by a forced arming (seen from the panel event log, so also zones above 16 on an Absoluta 16; not known after an HA restart while already armed). `bypassed_zones` is just a true/false flag. The all-partitions entity has `arming_modes` (per partition) and `bypassed_zone_names` too. |
 | **Zone** (binary sensor) | One per zone, on = open. Attributes: alarm, alarm memory, tamper, fault, low battery, bypassed. |
 | **Troubles** (binary sensor) | On when the panel reports a trouble (mains, battery, faults…). |
 | **Connection** (binary sensor) | State of the ITv2 session. |

@@ -481,8 +481,13 @@ async def test_arming_mode_and_bypassed_zones():
             if client.partitions[1].armed and 1 not in client.arming_requested:
                 break
         await asyncio.sleep(0.6)
-        assert client.arming_mode(1) is None  # armed: no longer "arming"
+        assert client.arming_mode(1) == ("stay", False)  # kept while armed
         await client.disarm(1)
+        for _ in range(60):
+            await asyncio.sleep(0.05)
+            if client.arming_mode(1) is None:
+                break
+        assert client.arming_mode(1) is None  # disarmed: cleared
 
         assert client.bypassed_zones() == []
         await client.set_zone_bypass(2, True)
@@ -810,4 +815,56 @@ async def test_previous_session_login_hidden_after_restart():
         assert texts[0] == "Inser. eseguito"
     finally:
         await second.stop()
+        await panel.stop()
+
+
+async def test_arming_mode_from_0232_keypad_notification():
+    """Arming from a keypad: the 0232 carries the mode but no partition, the
+    0230 exit delay that follows tells the partition (issue #17)."""
+    panel = FakePanel()
+    client = await _started(panel, load_labels=False)
+    try:
+        part = sorted(client.user_partitions)[1]
+        assert client.arming_mode(part) is None
+        panel._send(cmd_bytes(Cmd.ARMING_DISARMING) + bytes.fromhex("00 0f 01 00"))  # custom C
+        panel._send(cmd_bytes(Cmd.EXIT_DELAY) + bytes([1, part, 0x80, 0]))
+        for _ in range(60):
+            await asyncio.sleep(0.05)
+            if client.arming_mode(part):
+                break
+        assert client.arming_mode(part) == ("custom_c", False)
+        other = sorted(client.user_partitions)[0]
+        assert client.arming_mode(other) is None
+        # an exit delay without a fresh 0232 does not take over an old mode
+        panel._send(cmd_bytes(Cmd.EXIT_DELAY) + bytes([1, other, 0x80, 0]))
+        await asyncio.sleep(0.3)
+        client._announced_arm_mode = (client._announced_arm_mode[0], 0.0)
+        client.arming_modes.pop(other, None)
+        panel._send(cmd_bytes(Cmd.EXIT_DELAY) + bytes([1, other, 0x80, 0]))
+        await asyncio.sleep(0.3)
+        assert client.arming_mode(other) is None
+        assert not panel.errors
+    finally:
+        await client.stop()
+        await panel.stop()
+
+
+async def test_inhibited_zones_above_16_from_event_log():
+    """Zones excluded by a forced arming (zone 17 has no 0811 status on an
+    Absoluta 16) are known from the "Zone Inhibit" events (issue #17)."""
+    panel = FakePanel()
+    client = await _started(panel, load_labels=True)
+    try:
+        assert client.bypassed_zones() == []
+        panel.log_event(0x4002, who=16, parts=(1,))  # zone 17 inhibited
+        await client.check_events()
+        assert client.bypassed_zones() == [17]
+        assert client.bypassed_zones(1) == [17]
+        assert client.bypassed_zones(2) == []
+        panel.log_event(0x4802, who=16, parts=(1,))  # restore
+        await client.check_events()
+        assert client.bypassed_zones() == []
+        assert not panel.errors
+    finally:
+        await client.stop()
         await panel.stop()

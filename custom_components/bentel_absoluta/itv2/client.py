@@ -102,7 +102,19 @@ ARM_MODE_NAMES = {
     ArmMode.CUSTOM_C: "custom_c",
     ArmMode.CUSTOM_D: "custom_d",
 }
+# 0232 arming types (they differ from the 0900 arm modes for instant stay)
+ARM_NOTIFICATION_MODES = {
+    0x01: ArmMode.STAY,
+    0x02: ArmMode.AWAY,
+    0x0D: ArmMode.CUSTOM_A,
+    0x0E: ArmMode.CUSTOM_B,
+    0x0F: ArmMode.CUSTOM_C,
+    0x10: ArmMode.CUSTOM_D,
+    0x11: ArmMode.INSTANT_STAY,
+}
 BYPASS_READY_TIMEOUT = 60.0  # wait for the session before a zone bypass
+# Max delay between a 0232 arming notification and the 0230 exit delay it announces
+ARM_ANNOUNCE_WINDOW = 3.0
 CMD_ERR_LOCKED_OUT = 0x09
 # Consecutive unanswered requests (transport ACK received, reply missing) tolerated
 # before the session is considered lost: some ABS-IP firmware (02.00.10) drops a
@@ -245,6 +257,11 @@ class AbsolutaClient:
         self.arming_requested: set[int] = set()
         # Arm mode (0900 value) of the last arming requested by this client
         self.arming_modes: dict[int, int] = {}
+        # Mode announced by the last 0232 (it carries no partition) and when
+        self._announced_arm_mode: tuple[int, float] | None = None
+        # Zones inhibited / isolated according to the event log (zone -> partitions);
+        # the only way to know it for zones above 16 on an Absoluta 16
+        self.inhibited_zones: dict[int, tuple[int, ...]] = {}
         self.entry_delay: set[int] = set()
         self.zone_labels: dict[int, str] = {}
         self.partition_labels: dict[int, str] = {}
@@ -832,9 +849,9 @@ class AbsolutaClient:
             self.partitions.update(status)
             self.arming_requested.difference_update(status)
             for part, st in status.items():
-                # The mode is only meaningful while arming (exit delay)
+                # The mode is kept while the partition is armed (or arming)
                 if part not in self.arming_requested and not (
-                    st.armed and (st.exit_delay or part in self.exit_delay)
+                    st.armed or st.exit_delay or part in self.exit_delay
                 ):
                     self.arming_modes.pop(part, None)
             self._last_partition_read = time.monotonic()
@@ -849,6 +866,8 @@ class AbsolutaClient:
             part, status = msg.parse_delay(p)
             if part:
                 (self.exit_delay.add if status & 0x80 else self.exit_delay.discard)(part)
+                if status & 0x80:
+                    self._apply_announced_arm_mode(part)
                 changed = True
                 self.request_refresh()
         elif cmd == Cmd.ENTRY_DELAY:
@@ -863,6 +882,12 @@ class AbsolutaClient:
                 _, off = msg.read_var(p, 0)
                 arm_type = p[off]
                 self._event("arming", {"type": ARMING_TYPES.get(arm_type, arm_type)})
+                # No partition in the 0232: the 0230 exit delay that follows
+                # (about 0.3 s later) tells which partition(s) it applies to.
+                mode = ARM_NOTIFICATION_MODES.get(arm_type)
+                self._announced_arm_mode = (
+                    (int(mode), time.monotonic()) if mode is not None else None
+                )
             self.request_refresh()
         elif cmd == Cmd.MISC_ALARM:
             self._events_due = True
@@ -1249,6 +1274,7 @@ class AbsolutaClient:
         if first_read:
             new = []  # do not replay history at start-up
         for event in reversed(new):  # chronological order
+            self._track_inhibited_zone(event)
             self._event(
                 "log",
                 {
@@ -1472,32 +1498,55 @@ class AbsolutaClient:
             if p in self.exit_delay or (p in self.partitions and self.partitions[p].armed)
         ]
 
+    def _apply_announced_arm_mode(self, partition: int) -> None:
+        """Exit delay started: take the mode of the 0232 just received, if any
+        (arming from a keypad / app: not sent by this client)."""
+        announced = self._announced_arm_mode
+        if (
+            announced is not None
+            and partition not in self.arming_modes
+            and time.monotonic() - announced[1] <= ARM_ANNOUNCE_WINDOW
+        ):
+            self.arming_modes[partition] = announced[0]
+
     def arming_mode(self, partition: int) -> tuple[str, bool] | None:
         """Arm mode in progress for a partition and whether it is a forced one.
 
-        From the command sent by this client; for an arming started elsewhere
-        (keypad, app) only stay / away / night, from the 0812 flags.
+        From the command sent by this client or the 0232 notification that
+        precedes the exit delay (keypad, app); otherwise only away / stay /
+        night, from the 0812 flags while the partition is armed.
         """
         mode = self.arming_modes.get(partition)
         if mode is not None:
             name = ARM_MODE_NAMES.get(mode & 0x7F)
             return (name, bool(mode & 0x80)) if name else None
         st = self.partitions.get(partition)
-        if st is not None and st.armed and (st.exit_delay or partition in self.exit_delay):
+        if st is not None and st.armed:
             for name in ("away", "stay", "night"):
                 if getattr(st, name):
                     return name, False
         return None
 
     def bypassed_zones(self, partition: int = 0) -> list[int]:
-        """Bypassed zones (of one partition, when known). Zones above 16 on an
-        Absoluta 16 have no status over ITv2, so they can never be listed."""
+        """Bypassed zones (of one partition, when known): zones with the 0811
+        bypass bit plus zones inhibited / isolated according to the event log.
+        Zones above 16 on an Absoluta 16 have no status over ITv2, so they are
+        only known from the event log (not after an HA restart)."""
         zones = self.partition_zones.get(partition) if partition else None
-        return [
-            z
-            for z, st in sorted(self.zones.items())
-            if st.bypassed and (zones is None or z in zones)
-        ]
+        found = {z for z, st in self.zones.items() if st.bypassed and (zones is None or z in zones)}
+        for z, parts in self.inhibited_zones.items():
+            if not partition or partition in parts or (zones is not None and z in zones):
+                found.add(z)
+        return sorted(found)
+
+    def _track_inhibited_zone(self, event: ev.PanelEvent) -> None:
+        """Follow "Zone Inhibit" (4/0x02) and "Zone Isolated" (4/0x03) events."""
+        if event.cls != 4 or event.code not in (0x02, 0x03) or not event.zone:
+            return
+        if event.restore:
+            self.inhibited_zones.pop(event.zone, None)
+        else:
+            self.inhibited_zones[event.zone] = tuple(event.partitions)
 
     async def _armed_after_refusal(self, armed_before: set[int]) -> list[int]:
         """Partitions armed (or in exit delay) after a refused arm-all.

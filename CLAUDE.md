@@ -127,7 +127,15 @@ The repository is English-only (code, comments, docs); Italian is used only in
   own login ("Riconosciuto Cod", e.g. WHERE 0x0B WHO 0x09 on that panel) is recognised once per
   login; older user entries with the same WHERE/WHO (previous sessions, e.g. before an HA
   restart) are hidden from last_events too.
-- Partition attributes (0.3.28, issue #17): `arming_mode` / `arming_forced` come from the mode of the
-  0900 command this client sent (cleared once armed or disarmed); for an arming started from a keypad
-  only stay / away / night, from the 0812 flags. The 0232 arming notification is NOT parsed.
-  `bypassed_zone_names` = zones with the 0811 bypass bit; `bypassed_zones` is the 0812 byte-2 bit 2 flag.
+- Partition attributes (0.3.28 / 0.3.29, issue #17): `arming_mode` / `arming_forced` (and `arming_modes` on
+  the all-partitions entity) are kept while the partition is armed or arming, cleared on disarm. Sources:
+  the mode of the 0900 command this client sent; for an arming started elsewhere (keypad, app) the 0232
+  arming notification, which carries the type but NO partition (always 0 per the Usage Guide) and arrives
+  ~0.3 s before the 0230 exit delay (verified in a log: `02 32 00 0f 01 00` then `02 30 01 04 80 00`):
+  the type is assigned to the partitions whose exit delay starts within ARM_ANNOUNCE_WINDOW (3 s);
+  `arming_forced` is unknown then. Otherwise only away / stay / night from the 0812 flags.
+  `bypassed_zone_names` / `bypassed_zones()` = zones with the 0811 bypass bit plus zones inhibited /
+  isolated per the event log (class 4 codes 0x02 / 0x03, restore removes them): the only way to see the
+  zones above 16 (no 0811 status) that a forced arming excluded. Verified: forced custom C logs one
+  "Zone Inhibit" per excluded zone and the matching restore on disarm. Limit: unknown after an HA
+  restart while already armed (history is not replayed). `bypassed_zones` attribute is the 0812 byte-2 bit 2 flag.

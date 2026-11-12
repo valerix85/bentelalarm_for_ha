@@ -25,6 +25,7 @@ from homeassistant.helpers import entity_registry as er  # noqa: E402
 from pytest_homeassistant_custom_component.common import MockConfigEntry  # noqa: E402
 
 from custom_components.bentel_absoluta.const import CONF_PIN, DOMAIN  # noqa: E402
+from custom_components.bentel_absoluta.itv2.const import ArmMode  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -214,6 +215,43 @@ async def test_global_panel(hass: HomeAssistant, panel: FakePanel) -> None:
     await hass.async_block_till_done()
     assert hass.states.get(glob).state == "disarmed"
     assert not any(panel.part_raw[p][0] & 0x01 for p in panel.partitions)
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+
+async def test_global_panel_arming_attributes(hass: HomeAssistant, panel: FakePanel) -> None:
+    """The all-partitions entity lists what each arming partition is doing and the bypassed zones."""
+    panel.zone_raw[3] = 0x80  # zone 3 bypassed
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="00:03:4f:06:00:03",
+        data={CONF_HOST: "127.0.0.1", CONF_PORT: panel.port, CONF_PIN: "1234"},
+        options={"poll_interval": 2},
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    glob = "alarm_control_panel.bentel_absoluta_42_all_partitions"
+    client = entry.runtime_data
+
+    state = hass.states.get(glob)
+    assert state.attributes["arming_modes"] == {}
+    assert state.attributes["bypassed_zone_names"] == [client.zone_labels.get(3, "3")]
+
+    # two partitions are arming, one forced
+    first, second = sorted(client.user_partitions)[:2]
+    client.arming_requested.update({first, second})
+    client.arming_modes.update({first: int(ArmMode.AWAY), second: int(ArmMode.FORCE_CUSTOM_B)})
+    client._notify()
+    await hass.async_block_till_done()
+    state = hass.states.get(glob)
+    assert state.state == "arming"
+    names = client.partition_labels
+    assert state.attributes["arming_modes"] == {
+        names.get(first, str(first)): "away",
+        names.get(second, str(second)): "custom_b",
+    }
 
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()

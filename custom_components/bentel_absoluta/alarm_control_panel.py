@@ -113,7 +113,7 @@ class BentelPartition(BentelEntity, AlarmControlPanelEntity):
             return {}
         arming = (
             self.client.arming_mode(self.partition)
-            if self.alarm_state is AlarmControlPanelState.ARMING
+            if self.alarm_state not in (AlarmControlPanelState.DISARMED, None)
             else None
         )
         return {
@@ -264,7 +264,17 @@ class BentelGlobal(BentelPartition):
     def extra_state_attributes(self) -> dict:
         states = self._states()
         name = self.client.partition_labels.get
+        arming = {
+            name(p, str(p)): mode[0]
+            for p, s in states.items()
+            if s not in (AlarmControlPanelState.DISARMED, None)
+            and (mode := self.client.arming_mode(p))
+        }
         return {
+            "arming_modes": arming,
+            "bypassed_zone_names": [
+                self.client.zone_labels.get(z, str(z)) for z in self.client.bypassed_zones()
+            ],
             "armed_partitions": [name(p, str(p)) for p, s in states.items() if s in _ARMED],
             "disarmed_partitions": [
                 name(p, str(p)) for p, s in states.items() if s == AlarmControlPanelState.DISARMED
