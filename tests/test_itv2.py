@@ -443,6 +443,62 @@ async def test_event_log_time_sync_and_partition_zones():
         await panel.stop()
 
 
+async def test_rapid_zone_bypass_toggle_waits_for_session():
+    """Bypass on then off at once (issue #17): the second one must wait for the
+    reconnection, not log out in the middle of the discovery."""
+    panel = FakePanel()
+    client = await _started(panel, load_labels=False)
+    states = []
+    client.add_listener(lambda: states.append(client.connected))
+    try:
+        await client.set_zone_bypass(2, True)
+        await client.set_zone_bypass(2, False)  # right after, session not ready yet
+        for _ in range(100):
+            await asyncio.sleep(0.05)
+            if panel.connections == 3 and client.connected and not client.zones[2].bypassed:
+                break
+        await asyncio.sleep(0.3)
+        assert panel.connections == 3
+        assert not panel.zone_raw[2] & 0x80  # the second change was applied too
+        assert not client.zones[2].bypassed
+        assert False not in states  # never shown as unavailable
+        assert not panel.errors
+    finally:
+        await client.stop()
+        await panel.stop()
+
+
+async def test_arming_mode_and_bypassed_zones():
+    panel = FakePanel()
+    client = await _started(panel, load_labels=False)
+    try:
+        await client.arm(1, ArmMode.FORCE_CUSTOM_B)
+        assert client.arming_mode(1) == ("custom_b", True)  # known as soon as accepted
+        await client.arm(1, ArmMode.STAY)
+        assert client.arming_mode(1) == ("stay", False)
+        for _ in range(60):
+            await asyncio.sleep(0.05)
+            if client.partitions[1].armed and 1 not in client.arming_requested:
+                break
+        await asyncio.sleep(0.6)
+        assert client.arming_mode(1) is None  # armed: no longer "arming"
+        await client.disarm(1)
+
+        assert client.bypassed_zones() == []
+        await client.set_zone_bypass(2, True)
+        for _ in range(100):  # the panel applies it at log-out; read back after the reconnection
+            await asyncio.sleep(0.05)
+            if client.connected and client.bypassed_zones():
+                break
+        assert client.bypassed_zones() == [2]
+        assert client.bypassed_zones(2) == [2]  # zone 2 belongs to partition 2
+        assert client.bypassed_zones(1) == []
+        assert not panel.errors
+    finally:
+        await client.stop()
+        await panel.stop()
+
+
 async def test_bypass_event_not_hidden_by_own_relogin():
     panel = FakePanel()
     client = await _started(panel, load_labels=True)
