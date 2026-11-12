@@ -111,11 +111,22 @@ class BentelPartition(BentelEntity, AlarmControlPanelEntity):
         status = self.client.partitions.get(self.partition)
         if status is None:
             return {}
+        arming = (
+            self.client.arming_mode(self.partition)
+            if self.alarm_state is AlarmControlPanelState.ARMING
+            else None
+        )
         return {
+            "arming_mode": arming[0] if arming else None,
+            "arming_forced": arming[1] if arming else None,
             "ready": status.ready,
             "troubles": status.troubles,
             "alarm_in_memory": status.alarm_in_memory,
             "bypassed_zones": status.bypassed_zones,
+            "bypassed_zone_names": [
+                self.client.zone_labels.get(z, str(z))
+                for z in self.client.bypassed_zones(self.partition)
+            ],
             "in_test": status.in_test,
             "fire_alarm": status.fire_alarm,
             "zones": [
