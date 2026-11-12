@@ -38,6 +38,9 @@ The repository is English-only (code, comments, docs); Italian is used only in
 - Zone bypass 074A: Absoluta applies it only at log-out (0401), and after log-out the ABS-IP
   CLOSES the TCP connection (verified fw 3.60.37): the client does an immediate "planned"
   reconnect without marking entities unavailable.
+  Bypasses are serialised and wait for the session to be fully up (0.3.28, issue #17): a second
+  074A + 0401 sent during the discovery of the planned reconnection made the ABS-IP drop the
+  session ("connection closed during discovery", entities unavailable ~25 s, second change lost).
 - Labels: the panel may refuse a block (e.g. zones >16 on Absoluta 16); each block is
   independent and on refusal it is retried item by item.
 - Zone status beyond max_zones (0613): on Absoluta 16 fw 3.60.37 a 0811 request for zone 17
@@ -124,3 +127,7 @@ The repository is English-only (code, comments, docs); Italian is used only in
   own login ("Riconosciuto Cod", e.g. WHERE 0x0B WHO 0x09 on that panel) is recognised once per
   login; older user entries with the same WHERE/WHO (previous sessions, e.g. before an HA
   restart) are hidden from last_events too.
+- Partition attributes (0.3.28, issue #17): `arming_mode` / `arming_forced` come from the mode of the
+  0900 command this client sent (cleared once armed or disarmed); for an arming started from a keypad
+  only stay / away / night, from the 0812 flags. The 0232 arming notification is NOT parsed.
+  `bypassed_zone_names` = zones with the 0811 bypass bit; `bypassed_zones` is the 0812 byte-2 bit 2 flag.
