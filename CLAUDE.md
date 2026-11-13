@@ -139,3 +139,8 @@ The repository is English-only (code, comments, docs); Italian is used only in
   zones above 16 (no 0811 status) that a forced arming excluded. Verified: forced custom C logs one
   "Zone Inhibit" per excluded zone and the matching restore on disarm. Limit: unknown after an HA
   restart while already armed (history is not replayed). `bypassed_zones` attribute is the 0812 byte-2 bit 2 flag.
+- Arm mode mapping (0.3.30, issue #18): options `arm_away_as` / `arm_home_as` / `arm_night_as` choose what the
+  Home Assistant Away / Home / Night arming sends: default, default forced (`mode | 0x80`), custom A-D or
+  forced custom A-D (0x8D..0x90). Applies to the partition and all-partitions entities, so a forced arming is
+  possible with the PIN required to arm (the forced buttons are hidden then). Not verified on a real panel
+  beyond what issue #14 / #17 logs show for forced custom modes.

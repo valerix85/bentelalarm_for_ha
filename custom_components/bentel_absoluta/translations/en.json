@@ -52,13 +52,19 @@
           "poll_interval": "Status polling interval",
           "require_code": "Require the code to disarm from Home Assistant",
           "require_code_arm": "Also require the code to arm",
-          "arm_modes": "Arm modes offered on each partition"
+          "arm_modes": "Arm modes offered on each partition",
+          "arm_away_as": "Away button sends",
+          "arm_home_as": "Home button sends",
+          "arm_night_as": "Night button sends"
         },
         "data_description": {
           "poll_interval": "Zone open/closed state is not pushed by the panel and is polled at this interval (it also works as keep-alive). 1-2 s for zones driving lights.",
           "require_code": "When enabled the alarm panel entities ask for the user PIN to disarm, and the zone bypass switches are not created.",
           "require_code_arm": "Only used when the code is required to disarm. When enabled the PIN is asked to arm too and the arming-mode buttons are not created; when disabled arming (also from automations and the arm mode buttons) needs no PIN.",
-          "arm_modes": "Absoluta partitions are normally just armed or disarmed (Away). Enable Home (stay) and Night (instant stay) only if you use them on the panel."
+          "arm_modes": "Absoluta partitions are normally just armed or disarmed (Away). Enable Home (stay) and Night (instant stay) only if you use them on the panel.",
+          "arm_away_as": "What the Away mode sends to the panel. Forced variants bypass open zones instead of being refused; they work with the arming code required too.",
+          "arm_home_as": "What the Home mode sends to the panel (default: stay).",
+          "arm_night_as": "What the Night mode sends to the panel (default: instant stay)."
         }
       }
     },
@@ -168,6 +174,20 @@
         "home": "Home – stay arming (Absoluta \"partial\")",
         "night": "Night – instant stay (partial, no entry delay)",
         "forced": "Forced – full arming even with open zones (they are bypassed). Shown as \"custom bypass\"."
+      }
+    },
+    "arm_as": {
+      "options": {
+        "default": "Default mode",
+        "default_forced": "Default mode, forced (open zones are bypassed)",
+        "custom_a": "Customised mode A",
+        "custom_b": "Customised mode B",
+        "custom_c": "Customised mode C",
+        "custom_d": "Customised mode D",
+        "custom_a_forced": "Customised mode A, forced",
+        "custom_b_forced": "Customised mode B, forced",
+        "custom_c_forced": "Customised mode C, forced",
+        "custom_d_forced": "Customised mode D, forced"
       }
     }
   }

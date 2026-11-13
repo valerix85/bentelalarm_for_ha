@@ -432,3 +432,57 @@ async def test_require_code_options(
         )
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
+
+
+async def test_arm_buttons_mapped_to_panel_modes(hass: HomeAssistant, panel: FakePanel) -> None:
+    """Away / Home / Night can send forced or customised modes (issue #18)."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="00:03:4f:06:00:03",
+        data={CONF_HOST: "127.0.0.1", CONF_PORT: panel.port, CONF_PIN: "1234"},
+        options={
+            "poll_interval": 5,
+            "arm_modes": ["away", "home", "night"],
+            "require_code": True,
+            "require_code_arm": True,
+            "arm_away_as": "custom_c_forced",
+            "arm_home_as": "default_forced",
+            "arm_night_as": "custom_a",
+        },
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    eid = "alarm_control_panel.bentel_absoluta_42_area_02"
+    for service, last_byte in (
+        ("alarm_arm_away", 0x8F),
+        ("alarm_arm_home", 0x81),
+        ("alarm_arm_night", 0x0D),
+    ):
+        await hass.services.async_call(
+            "alarm_control_panel",
+            service,
+            {"entity_id": eid, "code": "1234"},
+            blocking=True,
+        )
+        assert panel.log[-1][0] == 0x0900 and panel.log[-1][1][-1] == last_byte, service
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert not panel.errors
+
+
+def test_arm_mode_for_defaults() -> None:
+    from custom_components.bentel_absoluta.const import arm_mode_for
+    from custom_components.bentel_absoluta.itv2.const import ArmMode
+
+    assert arm_mode_for({}, "arm_away_as", ArmMode.AWAY) is ArmMode.AWAY
+    assert arm_mode_for({"arm_away_as": "default_forced"}, "arm_away_as", ArmMode.AWAY) == 0x82
+    assert (
+        arm_mode_for({"arm_night_as": "default_forced"}, "arm_night_as", ArmMode.INSTANT_STAY)
+        == ArmMode.FORCE_INSTANT_STAY
+    )
+    assert (
+        arm_mode_for({"arm_home_as": "custom_d"}, "arm_home_as", ArmMode.STAY) is ArmMode.CUSTOM_D
+    )
+    assert arm_mode_for({"arm_home_as": "bogus"}, "arm_home_as", ArmMode.STAY) is ArmMode.STAY

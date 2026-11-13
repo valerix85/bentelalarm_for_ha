@@ -19,8 +19,13 @@ from homeassistant.helpers import selector
 from homeassistant.helpers.device_registry import format_mac
 
 from .const import (
+    ARM_AS_DEFAULT,
+    ARM_AS_OPTIONS,
     ARM_MODES_ALL,
+    CONF_ARM_AWAY_AS,
+    CONF_ARM_HOME_AS,
     CONF_ARM_MODES,
+    CONF_ARM_NIGHT_AS,
     CONF_PIN,
     CONF_POLL_INTERVAL,
     CONF_REQUIRE_CODE,
@@ -213,6 +218,27 @@ class BentelOptionsFlow(OptionsFlow):
                         multiple=True,
                         mode=selector.SelectSelectorMode.LIST,
                         translation_key="arm_modes",
+                    )
+                ),
+                vol.Required(CONF_ARM_AWAY_AS, default=ARM_AS_DEFAULT): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=ARM_AS_OPTIONS,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                        translation_key="arm_as",
+                    )
+                ),
+                vol.Required(CONF_ARM_HOME_AS, default=ARM_AS_DEFAULT): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=ARM_AS_OPTIONS,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                        translation_key="arm_as",
+                    )
+                ),
+                vol.Required(CONF_ARM_NIGHT_AS, default=ARM_AS_DEFAULT): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=ARM_AS_OPTIONS,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                        translation_key="arm_as",
                     )
                 ),
                 vol.Required(CONF_REQUIRE_CODE, default=False): selector.BooleanSelector(),

@@ -101,6 +101,7 @@ Available from the integration's **Configure** button:
 | Arm modes | Away | Add *Home* (stay) and *Night* (instant stay) only if you use them on the panel. *Forced* arms even with open zones, which get bypassed; it appears in Home Assistant as "custom bypass". |
 | Require code to disarm | Off | Home Assistant asks for the PIN to disarm. Zone bypass switches are not created. |
 | Also require the code to arm | On | Only used with the option above. On: the PIN is asked to arm too and the arming mode buttons are not created. Off: arming needs no PIN, so automations and the *Arm mode A–D* buttons can arm, while disarming stays protected. |
+| Away / Home / Night button sends | Default | What each Home Assistant arm mode sends to the panel: the default mode (away, stay, instant stay), the default mode *forced* (open zones are bypassed instead of the arming being refused), or customised mode A–D, forced or not. Useful to arm with a shutter or door left open while the PIN is required to arm (the *Arm mode* buttons are not created then). |
 
 ## Entities
 

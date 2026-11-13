@@ -22,10 +22,14 @@ from .const import (
     ARM_MODE_FORCED,
     ARM_MODE_HOME,
     ARM_MODE_NIGHT,
+    CONF_ARM_AWAY_AS,
+    CONF_ARM_HOME_AS,
     CONF_ARM_MODES,
+    CONF_ARM_NIGHT_AS,
     CONF_PIN,
     DEFAULT_ARM_MODES,
     DOMAIN,
+    arm_mode_for,
     code_required,
 )
 from .entity import BentelEntity
@@ -101,6 +105,9 @@ class BentelPartition(BentelEntity, AlarmControlPanelEntity):
             # HA "custom bypass" = Absoluta forced arming (open zones are bypassed)
             features |= AlarmControlPanelEntityFeature.ARM_CUSTOM_BYPASS
         self._attr_supported_features = features
+        self._arm_away = arm_mode_for(entry.options, CONF_ARM_AWAY_AS, ArmMode.AWAY)
+        self._arm_home = arm_mode_for(entry.options, CONF_ARM_HOME_AS, ArmMode.STAY)
+        self._arm_night = arm_mode_for(entry.options, CONF_ARM_NIGHT_AS, ArmMode.INSTANT_STAY)
 
     @property
     def alarm_state(self) -> AlarmControlPanelState | None:
@@ -204,15 +211,15 @@ class BentelPartition(BentelEntity, AlarmControlPanelEntity):
 
     async def async_alarm_arm_away(self, code: str | None = None) -> None:
         self._check_code(code)
-        await self._run(self.client.arm(self.partition, ArmMode.AWAY))
+        await self._run(self.client.arm(self.partition, self._arm_away))
 
     async def async_alarm_arm_home(self, code: str | None = None) -> None:
         self._check_code(code)
-        await self._run(self.client.arm(self.partition, ArmMode.STAY))
+        await self._run(self.client.arm(self.partition, self._arm_home))
 
     async def async_alarm_arm_night(self, code: str | None = None) -> None:
         self._check_code(code)
-        await self._run(self.client.arm(self.partition, ArmMode.INSTANT_STAY))
+        await self._run(self.client.arm(self.partition, self._arm_night))
 
     async def async_alarm_arm_custom_bypass(self, code: str | None = None) -> None:
         """Forced away arming: the panel arms even with zones left open."""

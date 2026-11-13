@@ -52,13 +52,19 @@
           "poll_interval": "Intervallo di lettura dello stato",
           "require_code": "Richiedi il codice per disinserire da Home Assistant",
           "require_code_arm": "Richiedi il codice anche per inserire",
-          "arm_modes": "Modalità di inserimento proposte per ogni area"
+          "arm_modes": "Modalità di inserimento proposte per ogni area",
+          "arm_away_as": "Il pulsante Fuori casa invia",
+          "arm_home_as": "Il pulsante In casa invia",
+          "arm_night_as": "Il pulsante Notte invia"
         },
         "data_description": {
           "poll_interval": "Lo stato aperto/chiuso delle zone non viene notificato dalla centrale e viene letto a questo intervallo (funziona anche da keep-alive). 1-2 s per zone che accendono luci.",
           "require_code": "Se attivo, le entità di allarme chiedono il PIN utente per disinserire e gli interruttori di esclusione zona non vengono creati.",
           "require_code_arm": "Usato solo se il codice è richiesto per disinserire. Se attivo il PIN è chiesto anche per inserire e i pulsanti delle modalità di inserimento non vengono creati; se disattivo l'inserimento (anche da automazioni e dai pulsanti dei modi) non richiede il PIN.",
-          "arm_modes": "Le aree Absoluta di solito sono solo inserite o disinserite (Fuori casa = inserimento totale). Attiva In casa (parziale) e Notte (parziale istantaneo) solo se le usi sulla centrale."
+          "arm_modes": "Le aree Absoluta di solito sono solo inserite o disinserite (Fuori casa = inserimento totale). Attiva In casa (parziale) e Notte (parziale istantaneo) solo se le usi sulla centrale.",
+          "arm_away_as": "Cosa invia alla centrale la modalità Fuori casa. Le varianti forzate escludono le zone aperte invece di essere rifiutate; funzionano anche con il codice richiesto per inserire.",
+          "arm_home_as": "Cosa invia alla centrale la modalità In casa (predefinita: stay).",
+          "arm_night_as": "Cosa invia alla centrale la modalità Notte (predefinita: parziale istantaneo)."
         }
       }
     },
@@ -168,6 +174,20 @@
         "home": "In casa – inserimento parziale (stay)",
         "night": "Notte – parziale istantaneo (senza ritardo di ingresso)",
         "forced": "Forzato – inserimento totale anche con zone aperte (vengono escluse). In Home Assistant appare come \"bypass personalizzato\"."
+      }
+    },
+    "arm_as": {
+      "options": {
+        "default": "Modalità predefinita",
+        "default_forced": "Modalità predefinita, forzata (le zone aperte vengono escluse)",
+        "custom_a": "Modalità personalizzata A",
+        "custom_b": "Modalità personalizzata B",
+        "custom_c": "Modalità personalizzata C",
+        "custom_d": "Modalità personalizzata D",
+        "custom_a_forced": "Modalità personalizzata A, forzata",
+        "custom_b_forced": "Modalità personalizzata B, forzata",
+        "custom_c_forced": "Modalità personalizzata C, forzata",
+        "custom_d_forced": "Modalità personalizzata D, forzata"
       }
     }
   }

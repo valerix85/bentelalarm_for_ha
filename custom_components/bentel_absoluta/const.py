@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .itv2.const import DEFAULT_PORT  # noqa: F401
+from .itv2.const import DEFAULT_PORT, ArmMode  # noqa: F401
 
 DOMAIN = "bentel_absoluta"
 MANUFACTURER = "Bentel Security"
@@ -39,3 +39,42 @@ MIN_POLL_INTERVAL = 1
 MAX_POLL_INTERVAL = 60
 
 EVENT_BENTEL = f"{DOMAIN}_event"
+
+
+# What the Home Assistant Away / Home / Night buttons send to the panel
+# (0.3.30, issue #18): the default mode, a forced variant (open zones are
+# bypassed) or a customised mode A-D, forced or not.
+CONF_ARM_AWAY_AS = "arm_away_as"
+CONF_ARM_HOME_AS = "arm_home_as"
+CONF_ARM_NIGHT_AS = "arm_night_as"
+ARM_AS_DEFAULT = "default"
+ARM_AS_OPTIONS = [
+    ARM_AS_DEFAULT,
+    "default_forced",
+    "custom_a",
+    "custom_b",
+    "custom_c",
+    "custom_d",
+    "custom_a_forced",
+    "custom_b_forced",
+    "custom_c_forced",
+    "custom_d_forced",
+]
+_ARM_AS_MODES = {
+    "custom_a": ArmMode.CUSTOM_A,
+    "custom_b": ArmMode.CUSTOM_B,
+    "custom_c": ArmMode.CUSTOM_C,
+    "custom_d": ArmMode.CUSTOM_D,
+    "custom_a_forced": ArmMode.FORCE_CUSTOM_A,
+    "custom_b_forced": ArmMode.FORCE_CUSTOM_B,
+    "custom_c_forced": ArmMode.FORCE_CUSTOM_C,
+    "custom_d_forced": ArmMode.FORCE_CUSTOM_D,
+}
+
+
+def arm_mode_for(options, key: str, default: ArmMode) -> ArmMode:
+    """Panel arm mode sent for a Home Assistant mode (``key`` = CONF_ARM_*_AS)."""
+    choice = options.get(key, ARM_AS_DEFAULT)
+    if choice == "default_forced":
+        return ArmMode(int(default) | 0x80)
+    return _ARM_AS_MODES.get(choice, default)
