@@ -868,3 +868,34 @@ async def test_inhibited_zones_above_16_from_event_log():
     finally:
         await client.stop()
         await panel.stop()
+
+
+async def test_arming_mode_applies_to_partitions_armed_without_exit_delay():
+    """A custom mode arms more partitions, some without exit delay (issue #17,
+    log of 13 Nov: 0232 custom B, 0230 for one partition only, another one just
+    appears armed in the next 0812)."""
+    panel = FakePanel(partitions=(1, 2, 3))
+    client = await _started(panel, load_labels=False)
+    try:
+        first, second, third = sorted(client.user_partitions)[:3]
+        panel._send(cmd_bytes(Cmd.ARMING_DISARMING) + bytes.fromhex("00 0e 01 00"))  # custom B
+        panel._send(cmd_bytes(Cmd.EXIT_DELAY) + bytes([1, first, 0x80, 0]))
+        panel.part_raw[second][0] = 0x05  # armed away, no exit delay
+        panel.push_partition_status()
+        for _ in range(60):
+            await asyncio.sleep(0.05)
+            if client.arming_mode(first) and client.partitions[second].armed:
+                break
+        assert client.arming_mode(first) == ("custom_b", False)
+        assert client.arming_mode(second) == ("custom_b", False)
+        assert client.arming_mode(third) is None
+        # a partition armed later, with no new 0232, keeps the flags only
+        client._announced_arm_mode = (client._announced_arm_mode[0], 0.0)
+        panel.part_raw[third][0] = 0x05
+        panel.push_partition_status()
+        await asyncio.sleep(0.4)
+        assert client.arming_mode(third) == ("away", False)
+        assert not panel.errors
+    finally:
+        await client.stop()
+        await panel.stop()

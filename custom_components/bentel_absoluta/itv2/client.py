@@ -113,8 +113,9 @@ ARM_NOTIFICATION_MODES = {
     0x11: ArmMode.INSTANT_STAY,
 }
 BYPASS_READY_TIMEOUT = 60.0  # wait for the session before a zone bypass
-# Max delay between a 0232 arming notification and the 0230 exit delay it announces
-ARM_ANNOUNCE_WINDOW = 3.0
+# Max delay between a 0232 arming notification and the 0230 exit delay (or the
+# 0812 status of a partition armed without exit delay) it applies to
+ARM_ANNOUNCE_WINDOW = 8.0
 CMD_ERR_LOCKED_OUT = 0x09
 # Consecutive unanswered requests (transport ACK received, reply missing) tolerated
 # before the session is considered lost: some ABS-IP firmware (02.00.10) drops a
@@ -846,6 +847,11 @@ class AbsolutaClient:
         changed = False
         if cmd == Cmd.PARTITION_STATUS:
             status = msg.parse_partition_status(p)
+            newly_armed = [
+                part
+                for part, st in status.items()
+                if st.armed and not (part in self.partitions and self.partitions[part].armed)
+            ]
             self.partitions.update(status)
             self.arming_requested.difference_update(status)
             for part, st in status.items():
@@ -854,6 +860,8 @@ class AbsolutaClient:
                     st.armed or st.exit_delay or part in self.exit_delay
                 ):
                     self.arming_modes.pop(part, None)
+            for part in newly_armed:
+                self._apply_announced_arm_mode(part)
             self._last_partition_read = time.monotonic()
             changed = True
         elif cmd == Cmd.ZONE_STATUS:
@@ -1499,8 +1507,10 @@ class AbsolutaClient:
         ]
 
     def _apply_announced_arm_mode(self, partition: int) -> None:
-        """Exit delay started: take the mode of the 0232 just received, if any
-        (arming from a keypad / app: not sent by this client)."""
+        """Exit delay started, or partition just seen armed: take the mode of the
+        0232 just received, if any (arming from a keypad / app: not sent by this
+        client). A custom mode can arm several partitions (issue #17), some of
+        them without an exit delay, and the 0232 does not name them."""
         announced = self._announced_arm_mode
         if (
             announced is not None

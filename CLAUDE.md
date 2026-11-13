@@ -144,3 +144,9 @@ The repository is English-only (code, comments, docs); Italian is used only in
   forced custom A-D (0x8D..0x90). Applies to the partition and all-partitions entities, so a forced arming is
   possible with the PIN required to arm (the forced buttons are hidden then). Not verified on a real panel
   beyond what issue #14 / #17 logs show for forced custom modes.
+- Custom modes arm several partitions (0.3.31, issue #17, Absoluta 16 log 13 Nov): `0232 00 0e 01 00`
+  (custom B) at 20:10:39.455, `0230` exit delay for ONE partition only (4) 0.3 s later, and the next 0812
+  (1.7 s after the 0232) shows partition 8 (GAS) armed away with no exit delay. The announced mode is
+  therefore applied to every partition that starts an exit delay or is first seen armed within
+  ARM_ANNOUNCE_WINDOW (8 s) of the 0232. Heuristic: another partition armed by someone else in the
+  same seconds would get the same mode.
