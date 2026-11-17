@@ -1274,11 +1274,19 @@ class AbsolutaClient:
                         self._own_login_sig = (event.where, event.who)
                         self._own_login_time = event.timestamp
             new = [e for e in new if e.key not in self._own_login_keys]
-            if len(self._own_login_keys) > 50:
-                self._own_login_keys = {e.key for e in latest} & self._own_login_keys
         first_read = not self._events_initialized
         self._events_initialized = True
-        self.last_events = [e for e in latest if not self._is_own_login(e)]
+        self.last_events = []
+        for event in latest:
+            if self._is_own_login(event):
+                # Remember the hidden logins of previous sessions too: they are
+                # not in last_events, so without their key the next read would
+                # see them as new and fire them as events again (issue #20).
+                self._own_login_keys.add(event.key)
+            else:
+                self.last_events.append(event)
+        if len(self._own_login_keys) > 50:
+            self._own_login_keys &= {e.key for e in latest}
         if first_read:
             new = []  # do not replay history at start-up
         for event in reversed(new):  # chronological order

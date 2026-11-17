@@ -150,3 +150,8 @@ The repository is English-only (code, comments, docs); Italian is used only in
   therefore applied to every partition that starts an exit delay or is first seen armed within
   ARM_ANNOUNCE_WINDOW (8 s) of the 0232. Heuristic: another partition armed by someone else in the
   same seconds would get the same mode.
+- Hidden old logins (0.3.32, issue #20, Absoluta Plus 48): after an HA restart the previous session's
+  "Riconosciuto Cod" is hidden from last_events but was not in `_own_login_keys`, so from the second read
+  it counted as new and was fired as an event every 30 s until it left the last 5 records (~5800 events in
+  15 h). The keys of every hidden login are now remembered. "Arming refused" (class 0, code 0x44) is logged
+  once per open zone with WHERE 0x7C and WHO = the 0-based zone (16 records, one user): `zone` is set for it.

@@ -371,6 +371,10 @@ class PanelEvent:
         # alarm logged with WHERE 0x3F, WHO 0x0A for zone 11 (issue #11).
         if 0x3E <= self.where <= 0x65 or self.where == 0x7B:
             return self.who + 1
+        # "Arming refused" (0x44) is logged once per open zone with WHERE 0x7C and
+        # WHO = the 0-based zone (Absoluta Plus 48, 16 records, issue #20).
+        if self.where == 0x7C and (self.cls, self.code) == (0, 0x44):
+            return self.who + 1
         return None
 
     @property

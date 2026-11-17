@@ -818,6 +818,40 @@ async def test_previous_session_login_hidden_after_restart():
         await panel.stop()
 
 
+@pytest.mark.asyncio
+async def test_previous_session_login_not_fired_as_event_after_restart():
+    """The hidden login of a previous session must not come back as a new event
+    at the next read (issue #20: ~5800 events in 15 h)."""
+    panel = FakePanel()
+    first = await _started(panel, load_labels=False)
+    await first.stop()
+    panel.log_event(0x004D)  # arming OK between the two sessions
+    second = await _started(panel, load_labels=False)
+    logged: list[dict] = []
+    second.add_event_listener(lambda t, d: logged.append(d) if t == "log" else None)
+    try:
+        for _ in range(3):
+            await second.check_events()
+        assert logged == []
+        panel.log_event(0x0067)  # a genuinely new record is still fired
+        await second.check_events()
+        assert len(logged) == 1
+        assert "Riconosciuto Cod" not in [e.text() for e in second.last_events]
+    finally:
+        await second.stop()
+        await panel.stop()
+
+
+def test_arming_refused_zone_from_where_0x7c():
+    """"Arming refused" is logged once per open zone with WHERE 0x7C and WHO = the
+    0-based zone (issue #20)."""
+    refused = ev.PanelEvent(None, 0x0044, 0x7C, 4, (1,), b"")
+    assert refused.zone == 5
+    # the same WHERE on other events is not a zone
+    other = ev.PanelEvent(None, 0x004D, 0x7C, 4, (1,), b"")
+    assert other.zone is None
+
+
 async def test_arming_mode_from_0232_keypad_notification():
     """Arming from a keypad: the 0232 carries the mode but no partition, the
     0230 exit delay that follows tells the partition (issue #17)."""
