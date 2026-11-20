@@ -126,6 +126,7 @@ class BentelPartition(BentelEntity, AlarmControlPanelEntity):
         return {
             "arming_mode": arming[0] if arming else None,
             "arming_forced": arming[1] if arming else None,
+            "armed_from": self.client.armed_from(self.partition) if arming else None,
             "ready": status.ready,
             "troubles": status.troubles,
             "alarm_in_memory": status.alarm_in_memory,
@@ -277,8 +278,15 @@ class BentelGlobal(BentelPartition):
             if s not in (AlarmControlPanelState.DISARMED, None)
             and (mode := self.client.arming_mode(p))
         }
+        origins = {
+            name(p, str(p)): origin
+            for p, s in states.items()
+            if s not in (AlarmControlPanelState.DISARMED, None)
+            and (origin := self.client.armed_from(p))
+        }
         return {
             "arming_modes": arming,
+            "armed_from": origins,
             "bypassed_zone_names": [
                 self.client.zone_labels.get(z, str(z)) for z in self.client.bypassed_zones()
             ],

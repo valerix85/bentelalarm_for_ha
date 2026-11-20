@@ -237,12 +237,14 @@ async def test_global_panel_arming_attributes(hass: HomeAssistant, panel: FakePa
 
     state = hass.states.get(glob)
     assert state.attributes["arming_modes"] == {}
+    assert state.attributes["armed_from"] == {}
     assert state.attributes["bypassed_zone_names"] == [client.zone_labels.get(3, "3")]
 
     # two partitions are arming, one forced
     first, second = sorted(client.user_partitions)[:2]
     client.arming_requested.update({first, second})
     client.arming_modes.update({first: int(ArmMode.AWAY), second: int(ArmMode.FORCE_CUSTOM_B)})
+    client._arming_origin.update({first: "home_assistant", second: "panel"})
     client._notify()
     await hass.async_block_till_done()
     state = hass.states.get(glob)
@@ -251,6 +253,10 @@ async def test_global_panel_arming_attributes(hass: HomeAssistant, panel: FakePa
     assert state.attributes["arming_modes"] == {
         names.get(first, str(first)): "away",
         names.get(second, str(second)): "custom_b",
+    }
+    assert state.attributes["armed_from"] == {
+        names.get(first, str(first)): "home_assistant",
+        names.get(second, str(second)): "panel",
     }
 
     assert await hass.config_entries.async_unload(entry.entry_id)

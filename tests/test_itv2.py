@@ -883,6 +883,38 @@ async def test_arming_mode_from_0232_keypad_notification():
         await panel.stop()
 
 
+@pytest.mark.asyncio
+async def test_armed_from_home_assistant_or_panel():
+    """Home Assistant arming vs arming announced by the panel (keypad, app, cloud):
+    the attribute tells them apart (issue #17)."""
+    panel = FakePanel()
+    client = await _started(panel, load_labels=False)
+    try:
+        assert client.armed_from(1) is None
+        await client.arm(1, ArmMode.AWAY)
+        assert client.armed_from(1) == "home_assistant"
+        await client.disarm(1)
+        for _ in range(60):
+            await asyncio.sleep(0.05)
+            if client.arming_mode(1) is None:
+                break
+        assert client.armed_from(1) is None  # disarmed: cleared
+        # arming started elsewhere: 0232 (custom C) then the 0230 exit delay
+        part = sorted(client.user_partitions)[1]
+        panel._send(cmd_bytes(Cmd.ARMING_DISARMING) + bytes.fromhex("00 0f 01 00"))
+        panel._send(cmd_bytes(Cmd.EXIT_DELAY) + bytes([1, part, 0x80, 0]))
+        for _ in range(60):
+            await asyncio.sleep(0.05)
+            if client.armed_from(part):
+                break
+        assert client.armed_from(part) == "panel"
+        assert client.armed_from(sorted(client.user_partitions)[0]) is None
+        assert not panel.errors
+    finally:
+        await client.stop()
+        await panel.stop()
+
+
 async def test_inhibited_zones_above_16_from_event_log():
     """Zones excluded by a forced arming (zone 17 has no 0811 status on an
     Absoluta 16) are known from the "Zone Inhibit" events (issue #17)."""

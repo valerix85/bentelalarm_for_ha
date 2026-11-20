@@ -116,6 +116,8 @@ BYPASS_READY_TIMEOUT = 60.0  # wait for the session before a zone bypass
 # Max delay between a 0232 arming notification and the 0230 exit delay (or the
 # 0812 status of a partition armed without exit delay) it applies to
 ARM_ANNOUNCE_WINDOW = 8.0
+ARMED_FROM_HA = "home_assistant"
+ARMED_FROM_PANEL = "panel"
 CMD_ERR_LOCKED_OUT = 0x09
 # Consecutive unanswered requests (transport ACK received, reply missing) tolerated
 # before the session is considered lost: some ABS-IP firmware (02.00.10) drops a
@@ -258,6 +260,10 @@ class AbsolutaClient:
         self.arming_requested: set[int] = set()
         # Arm mode (0900 value) of the last arming requested by this client
         self.arming_modes: dict[int, int] = {}
+        # Who started the arming of a partition: ARMED_FROM_HA (command sent by this
+        # client) or ARMED_FROM_PANEL (announced by a 0232: keypad, app, cloud).
+        # Only meaningful while the partition has an entry in arming_modes.
+        self._arming_origin: dict[int, str] = {}
         # Mode announced by the last 0232 (it carries no partition) and when
         self._announced_arm_mode: tuple[int, float] | None = None
         # Zones inhibited / isolated according to the event log (zone -> partitions);
@@ -1504,6 +1510,7 @@ class AbsolutaClient:
         for part in self._targets(partition):
             self.arming_requested.add(part)
             self.arming_modes[part] = int(mode)
+            self._arming_origin[part] = ARMED_FROM_HA
         self._notify()
         self.request_refresh()
 
@@ -1526,6 +1533,7 @@ class AbsolutaClient:
             and time.monotonic() - announced[1] <= ARM_ANNOUNCE_WINDOW
         ):
             self.arming_modes[partition] = announced[0]
+            self._arming_origin[partition] = ARMED_FROM_PANEL
 
     def arming_mode(self, partition: int) -> tuple[str, bool] | None:
         """Arm mode in progress for a partition and whether it is a forced one.
@@ -1544,6 +1552,16 @@ class AbsolutaClient:
                 if getattr(st, name):
                     return name, False
         return None
+
+    def armed_from(self, partition: int) -> str | None:
+        """Where the arming of a partition came from, while it is armed or arming:
+        ARMED_FROM_HA (command sent by this client) or ARMED_FROM_PANEL (announced
+        by the panel: keypad, Bentel app or cloud, which cannot be told apart);
+        None when unknown (e.g. already armed when Home Assistant started, or a
+        type of arming the 0232 notification does not map)."""
+        if partition not in self.arming_modes:
+            return None
+        return self._arming_origin.get(partition)
 
     def bypassed_zones(self, partition: int = 0) -> list[int]:
         """Bypassed zones (of one partition, when known): zones with the 0811

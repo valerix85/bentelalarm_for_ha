@@ -155,3 +155,7 @@ The repository is English-only (code, comments, docs); Italian is used only in
   it counted as new and was fired as an event every 30 s until it left the last 5 records (~5800 events in
   15 h). The keys of every hidden login are now remembered. "Arming refused" (class 0, code 0x44) is logged
   once per open zone with WHERE 0x7C and WHO = the 0-based zone (16 records, one user): `zone` is set for it.
+- Arming source (0.3.33, issue #17): `armed_from` attribute on the partitions (and per partition on the
+  all-partitions entity): `home_assistant` when the 0900 was sent by this client, `panel` when the mode
+  came from a 0232 (keypad, Bentel app and cloud cannot be told apart: the 0232 always has user 0 and
+  method "access code"), empty when unknown (already armed when HA started) or while disarmed.
