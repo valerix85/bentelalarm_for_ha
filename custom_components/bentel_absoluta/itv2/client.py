@@ -116,6 +116,9 @@ BYPASS_READY_TIMEOUT = 60.0  # wait for the session before a zone bypass
 # Max delay between a 0232 arming notification and the 0230 exit delay (or the
 # 0812 status of a partition armed without exit delay) it applies to
 ARM_ANNOUNCE_WINDOW = 8.0
+# An accepted arm command shows "arming" until the partition is seen armed / in exit delay,
+# or this long: a partition that is not ready never arms (issue #17)
+ARMING_REQUEST_TTL = 12.0
 ARMED_FROM_HA = "home_assistant"
 ARMED_FROM_PANEL = "panel"
 CMD_ERR_LOCKED_OUT = 0x09
@@ -258,6 +261,7 @@ class AbsolutaClient:
         self.exit_delay: set[int] = set()
         # Partitions with an accepted arm command not yet confirmed by 0812
         self.arming_requested: set[int] = set()
+        self._arming_requested_at: dict[int, float] = {}
         # Arm mode (0900 value) of the last arming requested by this client
         self.arming_modes: dict[int, int] = {}
         # Who started the arming of a partition: ARMED_FROM_HA (command sent by this
@@ -860,7 +864,17 @@ class AbsolutaClient:
                 if st.armed and not (part in self.partitions and self.partitions[part].armed)
             ]
             self.partitions.update(status)
-            self.arming_requested.difference_update(status)
+            now = time.monotonic()
+            for part, st in status.items():
+                # An early 0812 (before the exit delay starts) must not make the
+                # partition look disarmed in between: arming -> disarmed -> arming
+                if part in self.arming_requested and (
+                    st.armed
+                    or st.exit_delay
+                    or part in self.exit_delay
+                    or now - self._arming_requested_at.get(part, 0.0) > ARMING_REQUEST_TTL
+                ):
+                    self.arming_requested.discard(part)
             for part, st in status.items():
                 # The mode is kept while the partition is armed (or arming)
                 if part not in self.arming_requested and not (
@@ -1511,6 +1525,7 @@ class AbsolutaClient:
         self._last_ha_arm = time.monotonic()
         for part in self._targets(partition):
             self.arming_requested.add(part)
+            self._arming_requested_at[part] = self._last_ha_arm
             self.arming_modes[part] = int(mode)
             self._arming_origin[part] = ARMED_FROM_HA
         self._notify()
@@ -1624,6 +1639,7 @@ class AbsolutaClient:
                 self.partitions[part] = msg.PartitionStatus(bytes(raw))
             self.exit_delay.discard(part)
             self.entry_delay.discard(part)
+            self.arming_requested.discard(part)
         self._notify()
         self.request_refresh()
 

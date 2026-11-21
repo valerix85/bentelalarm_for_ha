@@ -166,3 +166,7 @@ The repository is English-only (code, comments, docs); Italian is used only in
 - Arming partitions (0.3.35, issue #17): the all-partitions entity has `arming_partitions` (names of the
   partitions in the ARMING state: exit delay, or our 0900 accepted and not yet armed). With an HA arming of
   all partitions (partition 0) every target stays listed until the next 0812 shows which ones really armed.
+- Arming flicker (0.3.36, issue #17): the entity went arming -> disarmed -> arming because an 0812 read before
+  the panel starts the exit delay (0.5-4 s after the 0900) cleared `arming_requested`. It is now cleared only
+  when the partition is seen armed / in exit delay, on disarm, or after ARMING_REQUEST_TTL (12 s: a partition
+  that is not ready never arms). The mode in `arming_modes` is kept meanwhile.

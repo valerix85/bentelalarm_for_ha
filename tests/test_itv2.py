@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -900,6 +901,39 @@ async def test_armed_from_home_ours_when_mode_cleared_by_early_status():
             if client.armed_from(part):
                 break
         assert client.armed_from(part) == "home_assistant"
+        assert not panel.errors
+    finally:
+        await client.stop()
+        await panel.stop()
+
+
+@pytest.mark.asyncio
+async def test_arming_request_survives_early_status_then_expires():
+    """An 0812 before the exit delay must not drop "arming" (arming -> disarmed -> arming,
+    issue #17); a partition that never arms stops "arming" after ARMING_REQUEST_TTL."""
+    from itv2.client import ARMING_REQUEST_TTL
+
+    panel = FakePanel()
+    client = await _started(panel, load_labels=False)
+    try:
+        part = sorted(client.user_partitions)[0]
+        client.arming_requested.add(part)
+        client.arming_modes[part] = int(ArmMode.AWAY)
+        client._arming_requested_at[part] = time.monotonic()
+        # a status read where the partition is still disarmed: request kept
+        client.request_refresh()
+        await asyncio.sleep(1.5)
+        assert part in client.arming_requested
+        assert client.arming_modes.get(part) == int(ArmMode.AWAY)
+        # never armed: dropped once the TTL has passed
+        client._arming_requested_at[part] = time.monotonic() - ARMING_REQUEST_TTL - 1
+        client.request_refresh()
+        for _ in range(60):
+            await asyncio.sleep(0.05)
+            if part not in client.arming_requested:
+                break
+        assert part not in client.arming_requested
+        assert client.arming_modes.get(part) is None
         assert not panel.errors
     finally:
         await client.stop()
