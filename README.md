@@ -37,6 +37,7 @@ fully local, no cloud account, no MQTT bridge, no extra hardware.
 |---|---|---|
 | Absoluta 16 + ABS-IP | 3.60.37 | ✅ Tested by the author |
 | Absoluta 42 + ABS-IP | 3.60.24 | ✅ Reported working by a user |
+| Absoluta 42 + ABS-IP 02.00.06.00 | 3.60.24 | ✅ Reported working by a user ([#22](https://github.com/valerix85/bentelalarm_for_ha/issues/22)) |
 | Absoluta 42 + ABS-IP | 3.60.27 | ✅ Reported working by a user |
 | Absoluta 42 + ABS-IP | 3.60.28 | ✅ Reported working by a user (all 42 zones) |
 | Absoluta 42 + ABS-IP 2.00.08 | 3.60.37 | ✅ Reported working by a user (all 42 zones) |
@@ -51,6 +52,7 @@ The ABS-IP firmware matters more than the panel firmware. The full version is sh
 
 | ABS-IP firmware | Status |
 |---|---|
+| 02.00.06.00 | ✅ Works ([#22](https://github.com/valerix85/bentelalarm_for_ha/issues/22)) |
 | 2.00.08 | ✅ Works |
 | 2.00.09, 2.00.10 | ❌ On some panels status requests are not answered: no zone/partition status, reconnection every ~30 s ([#8](https://github.com/valerix85/bentelalarm_for_ha/issues/8), [#9](https://github.com/valerix85/bentelalarm_for_ha/issues/9)) |
 | 02.00.10.01 | ✅ Works from integration 0.3.17: about 0.4 % of the replies are lost and retried automatically ([#11](https://github.com/valerix85/bentelalarm_for_ha/issues/11)) |
