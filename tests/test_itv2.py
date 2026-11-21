@@ -884,6 +884,29 @@ async def test_arming_mode_from_0232_keypad_notification():
 
 
 @pytest.mark.asyncio
+async def test_armed_from_home_ours_when_mode_cleared_by_early_status():
+    """Partial mode sent by HA: an early 0812 clears the mode, then the 0232 and the
+    0230 that follow our own command must not turn it into "panel" (issue #17)."""
+    panel = FakePanel()
+    client = await _started(panel, load_labels=False)
+    try:
+        part = sorted(client.user_partitions)[0]
+        await client.arm(1, ArmMode.CUSTOM_C)
+        client.arming_modes.pop(part, None)  # what the early 0812 does
+        panel._send(cmd_bytes(Cmd.ARMING_DISARMING) + bytes.fromhex("00 0f 01 00"))
+        panel._send(cmd_bytes(Cmd.EXIT_DELAY) + bytes([1, part, 0x80, 0]))
+        for _ in range(60):
+            await asyncio.sleep(0.05)
+            if client.armed_from(part):
+                break
+        assert client.armed_from(part) == "home_assistant"
+        assert not panel.errors
+    finally:
+        await client.stop()
+        await panel.stop()
+
+
+@pytest.mark.asyncio
 async def test_armed_from_home_assistant_or_panel():
     """Home Assistant arming vs arming announced by the panel (keypad, app, cloud):
     the attribute tells them apart (issue #17)."""
@@ -899,6 +922,7 @@ async def test_armed_from_home_assistant_or_panel():
             if client.arming_mode(1) is None:
                 break
         assert client.armed_from(1) is None  # disarmed: cleared
+        client._last_ha_arm -= 60  # time passes: what follows is not ours
         # arming started elsewhere: 0232 (custom C) then the 0230 exit delay
         part = sorted(client.user_partitions)[1]
         panel._send(cmd_bytes(Cmd.ARMING_DISARMING) + bytes.fromhex("00 0f 01 00"))

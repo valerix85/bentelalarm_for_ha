@@ -264,6 +264,7 @@ class AbsolutaClient:
         # client) or ARMED_FROM_PANEL (announced by a 0232: keypad, app, cloud).
         # Only meaningful while the partition has an entry in arming_modes.
         self._arming_origin: dict[int, str] = {}
+        self._last_ha_arm = -1e9  # monotonic time of the last arm command sent by us
         # Mode announced by the last 0232 (it carries no partition) and when
         self._announced_arm_mode: tuple[int, float] | None = None
         # Zones inhibited / isolated according to the event log (zone -> partitions);
@@ -1507,6 +1508,7 @@ class AbsolutaClient:
             ) from err
         # The panel accepted the command: show the exit delay right away,
         # the real status follows with the 0812 notification / next poll.
+        self._last_ha_arm = time.monotonic()
         for part in self._targets(partition):
             self.arming_requested.add(part)
             self.arming_modes[part] = int(mode)
@@ -1533,7 +1535,11 @@ class AbsolutaClient:
             and time.monotonic() - announced[1] <= ARM_ANNOUNCE_WINDOW
         ):
             self.arming_modes[partition] = announced[0]
-            self._arming_origin[partition] = ARMED_FROM_PANEL
+            # The panel also announces (0232) the armings we sent: a partition
+            # whose mode was cleared by an early 0812 (partial modes, issue #17)
+            # is ours when the 0232 came right after our command.
+            ours = 0 <= announced[1] - self._last_ha_arm <= ARM_ANNOUNCE_WINDOW
+            self._arming_origin[partition] = ARMED_FROM_HA if ours else ARMED_FROM_PANEL
 
     def arming_mode(self, partition: int) -> tuple[str, bool] | None:
         """Arm mode in progress for a partition and whether it is a forced one.

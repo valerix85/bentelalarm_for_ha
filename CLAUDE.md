@@ -159,3 +159,7 @@ The repository is English-only (code, comments, docs); Italian is used only in
   all-partitions entity): `home_assistant` when the 0900 was sent by this client, `panel` when the mode
   came from a 0232 (keypad, Bentel app and cloud cannot be told apart: the 0232 always has user 0 and
   method "access code"), empty when unknown (already armed when HA started) or while disarmed.
+- armed_from fix (0.3.34, issue #17): for partial modes an early 0812 cleared `arming_modes` of the partitions
+  we had just armed, so the following 0232/0230 marked them `panel`. The 0232 received within
+  ARM_ANNOUNCE_WINDOW after our own 0900 (`_last_ha_arm`) is ours. The all-partitions entity now has a single
+  `armed_from` (home_assistant / panel / mixed / None) plus `armed_from_partitions` (per partition).

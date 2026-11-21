@@ -284,9 +284,12 @@ class BentelGlobal(BentelPartition):
             if s not in (AlarmControlPanelState.DISARMED, None)
             and (origin := self.client.armed_from(p))
         }
+        values = set(origins.values())
         return {
             "arming_modes": arming,
-            "armed_from": origins,
+            # one value for the whole system: home_assistant, panel, mixed or None
+            "armed_from": (values.pop() if len(values) == 1 else "mixed") if values else None,
+            "armed_from_partitions": origins,
             "bypassed_zone_names": [
                 self.client.zone_labels.get(z, str(z)) for z in self.client.bypassed_zones()
             ],
