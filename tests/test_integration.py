@@ -238,6 +238,7 @@ async def test_global_panel_arming_attributes(hass: HomeAssistant, panel: FakePa
     state = hass.states.get(glob)
     assert state.attributes["arming_modes"] == {}
     assert state.attributes["armed_from"] is None
+    assert state.attributes["arming_partitions"] == []
     assert state.attributes["armed_from_partitions"] == {}
     assert state.attributes["bypassed_zone_names"] == [client.zone_labels.get(3, "3")]
 
@@ -256,6 +257,10 @@ async def test_global_panel_arming_attributes(hass: HomeAssistant, panel: FakePa
         names.get(second, str(second)): "custom_b",
     }
     assert state.attributes["armed_from"] == "mixed"
+    assert state.attributes["arming_partitions"] == [
+        names.get(first, str(first)),
+        names.get(second, str(second)),
+    ]
     assert state.attributes["armed_from_partitions"] == {
         names.get(first, str(first)): "home_assistant",
         names.get(second, str(second)): "panel",

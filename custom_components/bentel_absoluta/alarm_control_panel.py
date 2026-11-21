@@ -293,6 +293,10 @@ class BentelGlobal(BentelPartition):
             "bypassed_zone_names": [
                 self.client.zone_labels.get(z, str(z)) for z in self.client.bypassed_zones()
             ],
+            # partitions in exit delay, before they are armed (also for keypad armings)
+            "arming_partitions": [
+                name(p, str(p)) for p, s in states.items() if s == AlarmControlPanelState.ARMING
+            ],
             "armed_partitions": [name(p, str(p)) for p, s in states.items() if s in _ARMED],
             "disarmed_partitions": [
                 name(p, str(p)) for p, s in states.items() if s == AlarmControlPanelState.DISARMED

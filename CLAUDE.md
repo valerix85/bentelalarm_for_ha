@@ -163,3 +163,6 @@ The repository is English-only (code, comments, docs); Italian is used only in
   we had just armed, so the following 0232/0230 marked them `panel`. The 0232 received within
   ARM_ANNOUNCE_WINDOW after our own 0900 (`_last_ha_arm`) is ours. The all-partitions entity now has a single
   `armed_from` (home_assistant / panel / mixed / None) plus `armed_from_partitions` (per partition).
+- Arming partitions (0.3.35, issue #17): the all-partitions entity has `arming_partitions` (names of the
+  partitions in the ARMING state: exit delay, or our 0900 accepted and not yet armed). With an HA arming of
+  all partitions (partition 0) every target stays listed until the next 0812 shows which ones really armed.
