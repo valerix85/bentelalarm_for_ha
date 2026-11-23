@@ -334,6 +334,10 @@ ZONE_WHO = {
 PARTITION_WHO = {(1, 0x06), (2, 0x06), (3, 0x06)}
 
 
+# (class, code) of delivery receipts: SMS sent, event received OK, push event OK
+INFORMATIONAL_EVENTS = frozenset({(0, 0x78), (0, 0x7A), (0, 0x7E)})
+
+
 @dataclass(slots=True, frozen=True)
 class PanelEvent:
     timestamp: dt.datetime | None
@@ -382,6 +386,13 @@ class PanelEvent:
         if self.where == 0 and (self.cls, self.code) in PARTITION_WHO and self.who not in (0, 0xFF):
             return self.who
         return None
+
+    @property
+    def informational(self) -> bool:
+        """Delivery receipts the communicator logs after an event (SMS sent, event
+        received OK, push OK): they must not replace the real event in "Last event"
+        (issue #22). Failures are not listed here: they stay visible."""
+        return (self.cls, self.code) in INFORMATIONAL_EVENTS
 
     @property
     def documented(self) -> bool:

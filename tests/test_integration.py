@@ -367,7 +367,14 @@ async def test_new_features(hass: HomeAssistant, panel: FakePanel) -> None:
     state = hass.states.get(sensors[0].entity_id)
     assert state.state.startswith("Allarme di zona")
     assert state.attributes["recent"][0] == "Generico 0x0D"
-    # ... even when they fill the whole window of recent records
+    # delivery receipts (class 0 code 0x7E "Push Event OK") do not replace the alarm either (#22)
+    panel.log_event(0x007E)
+    await entry.runtime_data.check_events()
+    await hass.async_block_till_done()
+    state = hass.states.get(sensors[0].entity_id)
+    assert state.state.startswith("Allarme di zona")
+    assert state.attributes["recent"][0] == "Evento Push OK"
+    # ... even when undocumented codes fill the whole window of recent records
     for _ in range(12):
         panel.log_event(0x000D)
         panel.log_event(0x080D)  # restore

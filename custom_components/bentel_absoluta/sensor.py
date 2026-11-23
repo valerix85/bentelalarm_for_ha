@@ -39,11 +39,12 @@ class BentelLastEvent(BentelEntity, SensorEntity):
         return text[:255]
 
     def _latest(self):
-        """Most recent documented event. Undocumented codes are skipped, also when
-        they fill the whole window of recent records: the previous documented
-        event is kept instead (only shown as a last resort)."""
+        """Most recent documented event. Undocumented codes and delivery receipts
+        (push / SMS sent OK) are skipped, also when they fill the whole window of
+        recent records: the previous event is kept instead (only shown as a last
+        resort)."""
         events = self.client.last_events
-        latest = next((e for e in events if e.documented), None)
+        latest = next((e for e in events if e.documented and not e.informational), None)
         if latest is not None:
             self._last_documented = latest
             return latest

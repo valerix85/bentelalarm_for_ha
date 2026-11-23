@@ -181,3 +181,7 @@ The repository is English-only (code, comments, docs); Italian is used only in
   window were read together and the sensor, which shows the newest documented record, showed only the
   disarm (the alarm was only in `recent` and in the `log` bus event). A new partition alarm / siren / fire
   bit (0812) or a new zone alarm bit (0811) now sets `_events_due`.
+- Delivery receipts (0.3.39, issue #22): two seconds after an alarm the panel logs "Push Event OK" (class 0,
+  code 0x7E) and the "Last event" sensor switched to it. `INFORMATIONAL_EVENTS` (0x78 SMS sent, 0x7A event
+  received OK, 0x7E push OK) are skipped by the sensor like undocumented codes; they stay in `recent` and in
+  the `log` bus events. Failures (0x79, 0x7B, 0x7F) are still shown.
