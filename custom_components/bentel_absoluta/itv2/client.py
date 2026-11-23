@@ -876,6 +876,14 @@ class AbsolutaClient:
                 for part, st in status.items()
                 if st.armed and not (part in self.partitions and self.partitions[part].armed)
             ]
+            for part, st in status.items():
+                # A new alarm: read the event log now, so the alarm record is seen (and
+                # fired) even if the partition is disarmed within the 30 s poll
+                old_st = self.partitions.get(part)
+                if (st.alarm or st.siren or st.fire_alarm) and not (
+                    old_st is not None and (old_st.alarm or old_st.siren or old_st.fire_alarm)
+                ):
+                    self._events_due = True
             self.partitions.update(status)
             for part, st in status.items():
                 # An early 0812 (before the exit delay starts) must not make the
@@ -898,7 +906,12 @@ class AbsolutaClient:
             self._last_partition_read = time.monotonic()
             changed = True
         elif cmd == Cmd.ZONE_STATUS:
-            self.zones.update(msg.parse_zone_status(p))
+            zones = msg.parse_zone_status(p)
+            if any(
+                z.alarm and not (n in self.zones and self.zones[n].alarm) for n, z in zones.items()
+            ):
+                self._events_due = True
+            self.zones.update(zones)
             changed = True
         elif cmd == Cmd.COMMAND_OUTPUT_ACTIVATION:
             self.outputs_on = msg.parse_output_activation(p)

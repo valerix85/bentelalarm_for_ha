@@ -974,6 +974,39 @@ async def test_disarm_ignores_stale_armed_status():
 
 
 @pytest.mark.asyncio
+async def test_new_alarm_triggers_event_log_read():
+    """A new alarm reads the event log at once (issue #22): the alarm record must not wait for
+    the 30 s poll, or a quick disarm leaves it out of the "Last event" sensor."""
+    panel = FakePanel()
+    client = await _started(panel, load_labels=False)
+    try:
+        calls = []
+        real = client.read_events
+
+        async def spy(first=0, count=5):
+            calls.append(first)
+            return await real(first, count)
+
+        client.read_events = spy
+        for _ in range(40):  # let a pending read finish
+            await asyncio.sleep(0.05)
+        client._events_due = False
+        client._last_events_check = time.monotonic()
+        calls.clear()
+        panel.part_raw[1] = bytearray(b"\x05\x01\x00")  # armed away + alarm
+        panel.push_partition_status()
+        for _ in range(100):
+            await asyncio.sleep(0.05)
+            if calls:
+                break
+        assert calls, "event log not read after a new alarm"
+        assert not panel.errors
+    finally:
+        await client.stop()
+        await panel.stop()
+
+
+@pytest.mark.asyncio
 async def test_armed_from_home_assistant_or_panel():
     """Home Assistant arming vs arming announced by the panel (keypad, app, cloud):
     the attribute tells them apart (issue #17)."""

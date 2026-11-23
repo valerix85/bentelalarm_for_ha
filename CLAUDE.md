@@ -176,3 +176,8 @@ The repository is English-only (code, comments, docs); Italian is used only in
   home_assistant -> null). The disarm now clears mode/origin/arming request, and for DISARM_GRACE (5 s) an
   0812 that still shows that partition armed is ignored. Hypothesis from the code and the report, not yet
   confirmed with a debug log.
+- Alarm records in "Last event" (0.3.38, issue #22, Absoluta 42): the event log is read every 30 s or on
+  0232 / misc alarm / trouble notifications, not on a zone or partition alarm. Alarm + disarm within the same
+  window were read together and the sensor, which shows the newest documented record, showed only the
+  disarm (the alarm was only in `recent` and in the `log` bus event). A new partition alarm / siren / fire
+  bit (0812) or a new zone alarm bit (0811) now sets `_events_due`.
