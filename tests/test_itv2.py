@@ -941,6 +941,39 @@ async def test_arming_request_survives_early_status_then_expires():
 
 
 @pytest.mark.asyncio
+async def test_disarm_ignores_stale_armed_status():
+    """After our disarm an 0812 still showing "armed" must not bring the arming
+    attributes back (armed_from home_assistant -> blank -> home_assistant -> null, issue #17)."""
+    panel = FakePanel()
+    client = await _started(panel, load_labels=False)
+    try:
+        await client.arm(1, ArmMode.AWAY)
+        for _ in range(60):
+            await asyncio.sleep(0.05)
+            if client.partitions[1].armed and 1 not in client.arming_requested:
+                break
+        assert client.armed_from(1) == "home_assistant"
+        await client.disarm(1)
+        assert client.armed_from(1) is None and client.arming_mode(1) is None
+        # stale status (the panel has not reported the disarm yet): still armed away
+        client._disarmed_at[1] = time.monotonic()
+        panel.part_raw[1] = bytearray(b"\x05\x00\x00")
+        panel.push_partition_status()
+        await asyncio.sleep(0.5)
+        assert not client.partitions[1].armed
+        assert client.armed_from(1) is None and client.arming_mode(1) is None
+        # the real status (disarmed) follows
+        panel.part_raw[1] = bytearray(b"\x02\x00\x00")
+        panel.push_partition_status()
+        await asyncio.sleep(0.5)
+        assert not client.partitions[1].armed and 1 not in client._disarmed_at
+        assert not panel.errors
+    finally:
+        await client.stop()
+        await panel.stop()
+
+
+@pytest.mark.asyncio
 async def test_armed_from_home_assistant_or_panel():
     """Home Assistant arming vs arming announced by the panel (keypad, app, cloud):
     the attribute tells them apart (issue #17)."""

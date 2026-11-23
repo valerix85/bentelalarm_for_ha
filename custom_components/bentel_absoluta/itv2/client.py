@@ -119,6 +119,8 @@ ARM_ANNOUNCE_WINDOW = 8.0
 # An accepted arm command shows "arming" until the partition is seen armed / in exit delay,
 # or this long: a partition that is not ready never arms (issue #17)
 ARMING_REQUEST_TTL = 12.0
+# After an accepted disarm, an 0812 still showing the partition armed is stale: ignored for this long
+DISARM_GRACE = 5.0
 ARMED_FROM_HA = "home_assistant"
 ARMED_FROM_PANEL = "panel"
 CMD_ERR_LOCKED_OUT = 0x09
@@ -262,6 +264,7 @@ class AbsolutaClient:
         # Partitions with an accepted arm command not yet confirmed by 0812
         self.arming_requested: set[int] = set()
         self._arming_requested_at: dict[int, float] = {}
+        self._disarmed_at: dict[int, float] = {}
         # Arm mode (0900 value) of the last arming requested by this client
         self.arming_modes: dict[int, int] = {}
         # Who started the arming of a partition: ARMED_FROM_HA (command sent by this
@@ -858,13 +861,22 @@ class AbsolutaClient:
         changed = False
         if cmd == Cmd.PARTITION_STATUS:
             status = msg.parse_partition_status(p)
+            now = time.monotonic()
+            for part in list(status):
+                # Right after our disarm an 0812 can still show the partition armed:
+                # ignoring it avoids armed -> disarmed -> armed -> disarmed bouncing
+                since = self._disarmed_at.get(part)
+                if since is not None:
+                    if not status[part].armed or now - since > DISARM_GRACE:
+                        del self._disarmed_at[part]
+                    else:
+                        del status[part]
             newly_armed = [
                 part
                 for part, st in status.items()
                 if st.armed and not (part in self.partitions and self.partitions[part].armed)
             ]
             self.partitions.update(status)
-            now = time.monotonic()
             for part, st in status.items():
                 # An early 0812 (before the exit delay starts) must not make the
                 # partition look disarmed in between: arming -> disarmed -> arming
@@ -1637,9 +1649,12 @@ class AbsolutaClient:
                 if len(raw) > 1:
                     raw[1] &= ~0x41 & 0xFF  # clear alarm / siren
                 self.partitions[part] = msg.PartitionStatus(bytes(raw))
+                self._disarmed_at[part] = time.monotonic()
             self.exit_delay.discard(part)
             self.entry_delay.discard(part)
             self.arming_requested.discard(part)
+            self.arming_modes.pop(part, None)
+            self._arming_origin.pop(part, None)
         self._notify()
         self.request_refresh()
 

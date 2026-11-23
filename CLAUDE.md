@@ -170,3 +170,9 @@ The repository is English-only (code, comments, docs); Italian is used only in
   the panel starts the exit delay (0.5-4 s after the 0900) cleared `arming_requested`. It is now cleared only
   when the partition is seen armed / in exit delay, on disarm, or after ARMING_REQUEST_TTL (12 s: a partition
   that is not ready never arms). The mode in `arming_modes` is kept meanwhile.
+- Disarm bouncing (0.3.37, issue #17): after an accepted disarm the client shows the partition disarmed at
+  once, but an 0812 read still showing it armed (the panel is not done yet) put it back to armed with the
+  old mode and origin, then the real status cleared them again (`armed_from` home_assistant -> empty ->
+  home_assistant -> null). The disarm now clears mode/origin/arming request, and for DISARM_GRACE (5 s) an
+  0812 that still shows that partition armed is ignored. Hypothesis from the code and the report, not yet
+  confirmed with a debug log.
