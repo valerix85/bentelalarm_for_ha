@@ -124,7 +124,7 @@ Per-partition *troubles* and *ready* sensors are also available, disabled by def
 
 The integration fires `bentel_absoluta_event` with a `type` field: `log` (every new entry of
 the panel event log), `arming`, `blocking_condition` (e.g. mains failure preventing arming),
-`trouble` and `arming_pre_alert`. Example: get notified of any zone alarm.
+`trouble` and `arming_pre_alert`. The `arming` event carries the mode in `mode` (`away`, `stay`, `custom_a`…`custom_d`, `instant_stay`, `disarm`), also when the arming comes from a keypad. Example: get notified of any zone alarm.
 
 ```yaml
 automation:

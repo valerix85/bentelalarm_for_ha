@@ -16,7 +16,7 @@ pytest.importorskip("pytest_homeassistant_custom_component")
 sys.path.insert(0, str(Path(__file__).parents[1] / "custom_components" / "bentel_absoluta"))
 sys.path.insert(0, str(Path(__file__).parent))
 
-from fake_panel import FakePanel  # noqa: E402
+from fake_panel import FakePanel, cmd_bytes  # noqa: E402
 from homeassistant import config_entries  # noqa: E402
 from homeassistant.const import CONF_HOST, CONF_PORT  # noqa: E402
 from homeassistant.core import HomeAssistant  # noqa: E402
@@ -25,7 +25,7 @@ from homeassistant.helpers import entity_registry as er  # noqa: E402
 from pytest_homeassistant_custom_component.common import MockConfigEntry  # noqa: E402
 
 from custom_components.bentel_absoluta.const import CONF_PIN, DOMAIN  # noqa: E402
-from custom_components.bentel_absoluta.itv2.const import ArmMode  # noqa: E402
+from custom_components.bentel_absoluta.itv2.const import ArmMode, Cmd  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -358,6 +358,15 @@ async def test_new_features(hass: HomeAssistant, panel: FakePanel) -> None:
     await entry.runtime_data.check_events()
     await hass.async_block_till_done()
     assert any(d["type"] == "log" and d["zone"] == 3 for d in fired)
+
+    # an arming notification (0232, custom B) is fired as type "arming" with the mode in "mode"
+    panel._send(cmd_bytes(Cmd.ARMING_DISARMING) + bytes.fromhex("00 0e 01 00"))
+    for _ in range(40):
+        await asyncio.sleep(0.05)
+        if any(d["type"] == "arming" for d in fired):
+            break
+    await hass.async_block_till_done()
+    assert any(d["type"] == "arming" and d["mode"] == "custom_b" for d in fired)
     assert hass.states.get(sensors[0].entity_id).state.startswith("Allarme di zona")
 
     # undocumented codes (class 0 code 0x0D) do not replace the last event

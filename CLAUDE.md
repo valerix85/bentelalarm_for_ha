@@ -185,3 +185,7 @@ The repository is English-only (code, comments, docs); Italian is used only in
   code 0x7E) and the "Last event" sensor switched to it. `INFORMATIONAL_EVENTS` (0x78 SMS sent, 0x7A event
   received OK, 0x7E push OK) are skipped by the sensor like undocumented codes; they stay in `recent` and in
   the `log` bus events. Failures (0x79, 0x7B, 0x7F) are still shown.
+- Arming bus event (0.3.40, issue #17): the `arming` event carried the mode in a data key called `type`, which
+  overwrote the event's own `type` ("arming") when merged in `__init__._panel_event`: automations saw
+  `type: away` / `custom_b` instead of `type: arming`. The mode is now in `mode`
+  (`away`, `stay`, `custom_a`..`custom_d`, `instant_stay`, `disarm`, `user`).

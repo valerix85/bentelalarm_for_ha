@@ -935,7 +935,8 @@ class AbsolutaClient:
             if len(p) >= 2:
                 _, off = msg.read_var(p, 0)
                 arm_type = p[off]
-                self._event("arming", {"type": ARMING_TYPES.get(arm_type, arm_type)})
+                # not "type": the HA event already has a "type" (= "arming")
+                self._event("arming", {"mode": ARMING_TYPES.get(arm_type, arm_type)})
                 # No partition in the 0232: the 0230 exit delay that follows
                 # (about 0.3 s later) tells which partition(s) it applies to.
                 mode = ARM_NOTIFICATION_MODES.get(arm_type)
