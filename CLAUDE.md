@@ -189,3 +189,10 @@ The repository is English-only (code, comments, docs); Italian is used only in
   overwrote the event's own `type` ("arming") when merged in `__init__._panel_event`: automations saw
   `type: away` / `custom_b` instead of `type: arming`. The mode is now in `mode`
   (`away`, `stay`, `custom_a`..`custom_d`, `instant_stay`, `disarm`, `user`).
+- Arming mode after an HA restart (0.3.41, issue #17): the panel only reports "armed" (0812 away/stay/night flags),
+  so a custom mode showed as "away" after a restart. The client now saves `arming_modes` / `_arming_origin` and the
+  keys of the last event records (`.storage/bentel_absoluta.<entry_id>.arming`, `Store` in `__init__`, delayed save
+  on every state change) and gives them back at the first event-log read, only if the partition is armed (stay/away
+  flags must match for those modes) and the log shows no arming record (`events.ARMING_RECORDS`: 0x33, 0x4A,
+  0x4D "Arming OK", 0x66 "Disarming exec.") that is not in the saved keys. Not verified on a real panel: record
+  codes come from the log text table. An arming right before the restart falls back to the old behaviour.

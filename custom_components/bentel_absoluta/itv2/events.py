@@ -335,6 +335,10 @@ PARTITION_WHO = {(1, 0x06), (2, 0x06), (3, 0x06)}
 
 
 # (class, code) of delivery receipts: SMS sent, event received OK, push event OK
+# Records logged when the arming of the panel changes: arming done / forced /
+# quick, disarming done (a different record = someone armed or disarmed).
+ARMING_RECORDS = frozenset({(0, 0x33), (0, 0x4A), (0, 0x4D), (0, 0x66)})
+
 INFORMATIONAL_EVENTS = frozenset({(0, 0x78), (0, 0x7A), (0, 0x7E)})
 
 

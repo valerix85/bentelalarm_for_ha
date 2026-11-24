@@ -1089,3 +1089,87 @@ async def test_arming_mode_applies_to_partitions_armed_without_exit_delay():
     finally:
         await client.stop()
         await panel.stop()
+
+
+async def _armed_custom(panel):
+    """Client with partition 1 armed in custom C, event log read once."""
+    panel.log_event(0x0015)  # a user entry: not an arming record
+    client = await _started(panel, load_labels=False)
+    await client.arm(1, ArmMode.CUSTOM_C)
+    for _ in range(80):
+        await asyncio.sleep(0.05)
+        st = client.partitions.get(1)
+        if st is not None and st.armed:
+            break
+    assert client.partitions[1].armed
+    await client.check_events()
+    return client
+
+
+def _simulate_restart(client, snapshot):
+    client.arming_modes.clear()
+    client._arming_origin.clear()
+    client.last_events = []
+    client._events_initialized = False
+    client.load_arming_snapshot(snapshot)
+
+
+@pytest.mark.asyncio
+async def test_arming_mode_restored_after_restart():
+    """After an HA restart the panel only says "armed": the saved mode comes back
+    when the event log shows no arming / disarming since (issue #17)."""
+    panel = FakePanel()
+    client = await _armed_custom(panel)
+    try:
+        snapshot = client.arming_snapshot()
+        assert snapshot["modes"] == {"1": int(ArmMode.CUSTOM_C)}
+        _simulate_restart(client, snapshot)
+        await client.check_events()
+        assert client.arming_modes.get(1) == int(ArmMode.CUSTOM_C)
+        assert client.armed_from(1) == "home_assistant"
+    finally:
+        await client.stop()
+        await panel.stop()
+
+
+@pytest.mark.asyncio
+async def test_arming_mode_not_restored_when_log_shows_new_arming():
+    """Armed / disarmed by someone else while HA was down: do not guess the mode."""
+    panel = FakePanel()
+    client = await _armed_custom(panel)
+    try:
+        snapshot = client.arming_snapshot()
+        _simulate_restart(client, snapshot)
+        panel.log_event(0x004D)  # "Arming OK" logged while HA was down
+        await client.check_events()
+        assert 1 not in client.arming_modes
+    finally:
+        await client.stop()
+        await panel.stop()
+
+
+@pytest.mark.asyncio
+async def test_arming_mode_not_restored_when_partition_disarmed():
+    panel = FakePanel()
+    client = await _armed_custom(panel)
+    try:
+        snapshot = client.arming_snapshot()
+        await client.disarm(1)
+        for _ in range(80):
+            await asyncio.sleep(0.05)
+            st = client.partitions.get(1)
+            if st is not None and not st.armed:
+                break
+        _simulate_restart(client, snapshot)
+        await client.check_events()
+        assert 1 not in client.arming_modes
+    finally:
+        await client.stop()
+        await panel.stop()
+
+
+def test_load_arming_snapshot_ignores_garbage():
+    client = AbsolutaClient("127.0.0.1", "1234", 3064)
+    for bad in (None, [], {"modes": {"x": "y"}}, {"modes": {}}):
+        client.load_arming_snapshot(bad)
+        assert client._restore is None

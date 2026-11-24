@@ -272,6 +272,9 @@ class AbsolutaClient:
         # Only meaningful while the partition has an entry in arming_modes.
         self._arming_origin: dict[int, str] = {}
         self._last_ha_arm = -1e9  # monotonic time of the last arm command sent by us
+        # Arming modes saved before the last restart, applied at the first event
+        # log read if nothing changed meanwhile (see load_arming_snapshot)
+        self._restore: dict | None = None
         # Mode announced by the last 0232 (it carries no partition) and when
         self._announced_arm_mode: tuple[int, float] | None = None
         # Zones inhibited / isolated according to the event log (zone -> partitions);
@@ -1284,6 +1287,8 @@ class AbsolutaClient:
             ):
                 _LOGGER.info("Event log not available on this panel (%s)", err)
                 self._events_supported = False
+                self._restore_arming(None)
+                self._notify()
                 return
             self._events_failures += 1
             _LOGGER.debug("Event log read failed (%d): %s", self._events_failures, err)
@@ -1291,6 +1296,8 @@ class AbsolutaClient:
                 if not self._events_initialized:
                     _LOGGER.info("Event log does not answer, not reading it anymore")
                     self._events_supported = False
+                    self._restore_arming(None)
+                    self._notify()
                 elif self._events_failures == EVENTS_MAX_FAILURES:
                     _LOGGER.info(
                         "Event log read failed %d times in a row, retrying every %d s",
@@ -1303,6 +1310,7 @@ class AbsolutaClient:
             return
         self._events_failures = 0
         if not latest:
+            self._restore_arming([])
             return
         previous = {e.key for e in self.last_events} | self._own_login_keys
         new = [e for e in latest if e.key not in previous]
@@ -1336,6 +1344,7 @@ class AbsolutaClient:
             self._own_login_keys &= {e.key for e in latest}
         if first_read:
             new = []  # do not replay history at start-up
+            self._restore_arming(latest)
         for event in reversed(new):  # chronological order
             self._track_inhibited_zone(event)
             self._event(
@@ -1581,6 +1590,56 @@ class AbsolutaClient:
             # is ours when the 0232 came right after our command.
             ours = 0 <= announced[1] - self._last_ha_arm <= ARM_ANNOUNCE_WINDOW
             self._arming_origin[partition] = ARMED_FROM_HA if ours else ARMED_FROM_PANEL
+
+    def arming_snapshot(self) -> dict:
+        """Arm modes / origins and the event log seen, to survive a restart of
+        Home Assistant (after which the panel only says "armed", not how)."""
+        return {
+            "modes": {str(p): m for p, m in self.arming_modes.items()},
+            "origins": {str(p): o for p, o in self._arming_origin.items()},
+            "keys": [e.key.hex() for e in self.last_events],
+        }
+
+    def load_arming_snapshot(self, data: dict | None) -> None:
+        """Remember the snapshot saved before the restart (applied by check_events)."""
+        if not isinstance(data, dict):
+            return
+        try:
+            modes = {int(p): int(m) for p, m in (data.get("modes") or {}).items()}
+            origins = {int(p): str(o) for p, o in (data.get("origins") or {}).items()}
+            keys = {str(k) for k in (data.get("keys") or [])}
+        except (TypeError, ValueError):
+            return
+        if modes:
+            self._restore = {"modes": modes, "origins": origins, "keys": keys}
+
+    def _restore_arming(self, latest: list[ev.PanelEvent] | None) -> None:
+        """Give back the mode of partitions armed before the restart.
+
+        Skipped when the event log shows an arming / disarming newer than the
+        saved snapshot (someone changed it while Home Assistant was down). With
+        no event log (``latest`` None) the snapshot is trusted, and the
+        stay / away flags of the partition must still match.
+        """
+        restore, self._restore = self._restore, None
+        if restore is None:
+            return
+        if latest is not None and any(
+            e.key.hex() not in restore["keys"] and (e.cls, e.code) in ev.ARMING_RECORDS
+            for e in latest
+        ):
+            _LOGGER.debug("Arming changed while Home Assistant was down: mode not restored")
+            return
+        for part, mode in restore["modes"].items():
+            st = self.partitions.get(part)
+            if part in self.arming_modes or st is None or not st.armed:
+                continue
+            base = mode & 0x7F
+            if (base == 0x01 and not st.stay) or (base == 0x02 and not st.away):
+                continue
+            self.arming_modes[part] = mode
+            self._arming_origin[part] = restore["origins"].get(part, ARMED_FROM_PANEL)
+            _LOGGER.debug("Arming mode of partition %d restored: 0x%02X", part, mode)
 
     def arming_mode(self, partition: int) -> tuple[str, bool] | None:
         """Arm mode in progress for a partition and whether it is a forced one.

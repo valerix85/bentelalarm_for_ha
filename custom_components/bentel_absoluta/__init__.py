@@ -15,12 +15,14 @@ from homeassistant.const import (
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.storage import Store
 
 from .const import (
     CONF_PIN,
     CONF_POLL_INTERVAL,
     DEFAULT_POLL_INTERVAL,
     DEFAULT_PORT,
+    DOMAIN,
     EVENT_BENTEL,
 )
 from .itv2.client import AbsolutaClient, AuthenticationFailed, ITv2Error
@@ -46,6 +48,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: BentelConfigEntry) -> bo
         entry.data.get(CONF_PORT, DEFAULT_PORT),
         poll_interval=entry.options.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL),
     )
+    # Arm modes survive a restart: the panel only reports "armed", not how
+    store: Store = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.arming")
+    client.load_arming_snapshot(await store.async_load())
     try:
         await client.start()
     except AuthenticationFailed as err:
@@ -61,7 +66,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: BentelConfigEntry) -> bo
     def _panel_event(event_type: str, data: dict) -> None:
         hass.bus.async_fire(EVENT_BENTEL, {"entry_id": entry.entry_id, "type": event_type, **data})
 
+    saved: list[dict | None] = [None]
+
+    @callback
+    def _save_arming() -> None:
+        snapshot = client.arming_snapshot()
+        if snapshot != saved[0]:
+            saved[0] = snapshot
+            store.async_delay_save(client.arming_snapshot, 5)
+
     client.on_auth_failed = _auth_failed
+    entry.async_on_unload(client.add_listener(_save_arming))
     entry.async_on_unload(client.add_event_listener(_panel_event))
 
     async def _stop(_: Event) -> None:
