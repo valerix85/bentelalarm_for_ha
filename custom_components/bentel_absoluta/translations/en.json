@@ -55,7 +55,8 @@
           "arm_modes": "Arm modes offered on each partition",
           "arm_away_as": "Away button sends",
           "arm_home_as": "Home button sends",
-          "arm_night_as": "Night button sends"
+          "arm_night_as": "Night button sends",
+          "last_event_ignore": "Events hidden from \"Last event\""
         },
         "data_description": {
           "poll_interval": "Zone open/closed state is not pushed by the panel and is polled at this interval (it also works as keep-alive). 1-2 s for zones driving lights.",
@@ -64,7 +65,8 @@
           "arm_modes": "Absoluta partitions are normally just armed or disarmed (Away). Enable Home (stay) and Night (instant stay) only if you use them on the panel.",
           "arm_away_as": "What the Away mode sends to the panel. Forced variants bypass open zones instead of being refused; they work with the arming code required too.",
           "arm_home_as": "What the Home mode sends to the panel (default: stay).",
-          "arm_night_as": "What the Night mode sends to the panel (default: instant stay)."
+          "arm_night_as": "What the Night mode sends to the panel (default: instant stay).",
+          "last_event_ignore": "They stay in the \"recent\" attribute and are still fired as events. Leave empty to show every documented event."
         }
       }
     },
@@ -188,6 +190,14 @@
         "custom_b_forced": "Customised mode B, forced",
         "custom_c_forced": "Customised mode C, forced",
         "custom_d_forced": "Customised mode D, forced"
+      }
+    },
+    "last_event_ignore": {
+      "options": {
+        "receipts": "Delivery receipts (SMS sent, event received OK, push OK)",
+        "datetime": "Date / time changes",
+        "user_entry": "User entries (code recognised)",
+        "phone": "Phone calls (start, executed)"
       }
     }
   }

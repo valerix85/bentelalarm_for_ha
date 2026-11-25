@@ -8,6 +8,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
 from . import BentelConfigEntry
+from .const import CONF_LAST_EVENT_IGNORE, DEFAULT_LAST_EVENT_IGNORE
 from .entity import BentelEntity
 
 
@@ -28,6 +29,7 @@ class BentelLastEvent(BentelEntity, SensorEntity):
     def __init__(self, entry: BentelConfigEntry, italian: bool) -> None:
         super().__init__(entry, "last_event")
         self._italian = italian
+        self._ignore = tuple(entry.options.get(CONF_LAST_EVENT_IGNORE, DEFAULT_LAST_EVENT_IGNORE))
         self._last_documented = None
 
     def _describe(self, event) -> str:
@@ -39,12 +41,12 @@ class BentelLastEvent(BentelEntity, SensorEntity):
         return text[:255]
 
     def _latest(self):
-        """Most recent documented event. Undocumented codes and delivery receipts
-        (push / SMS sent OK) are skipped, also when they fill the whole window of
-        recent records: the previous event is kept instead (only shown as a last
-        resort)."""
+        """Most recent documented event. Undocumented codes and the categories chosen
+        in the options (default: delivery receipts, push / SMS sent OK) are skipped,
+        also when they fill the whole window of recent records: the previous event is
+        kept instead (only shown as a last resort)."""
         events = self.client.last_events
-        latest = next((e for e in events if e.documented and not e.informational), None)
+        latest = next((e for e in events if e.documented and not e.ignored_by(self._ignore)), None)
         if latest is not None:
             self._last_documented = latest
             return latest

@@ -52,13 +52,15 @@
           "poll_interval": "Status polling interval",
           "require_code": "Require the code to disarm from Home Assistant",
           "require_code_arm": "Also require the code to arm",
-          "arm_modes": "Arm modes offered on each partition"
+          "arm_modes": "Arm modes offered on each partition",
+          "last_event_ignore": "Events hidden from \"Last event\""
         },
         "data_description": {
           "poll_interval": "Zone open/closed state is not pushed by the panel and is polled at this interval (it also works as keep-alive). 1-2 s for zones driving lights.",
           "require_code": "When enabled the alarm panel entities ask for the user PIN to disarm, and the zone bypass switches are not created.",
           "require_code_arm": "Only used when the code is required to disarm. When enabled the PIN is asked to arm too and the arming-mode buttons are not created; when disabled arming (also from automations and the arm mode buttons) needs no PIN.",
-          "arm_modes": "Absoluta partitions are normally just armed or disarmed (Away). Enable Home (stay) and Night (instant stay) only if you use them on the panel."
+          "arm_modes": "Absoluta partitions are normally just armed or disarmed (Away). Enable Home (stay) and Night (instant stay) only if you use them on the panel.",
+          "last_event_ignore": "They stay in the \"recent\" attribute and are still fired as events. Leave empty to show every documented event."
         }
       }
     },
@@ -168,6 +170,14 @@
         "home": "Home – stay arming (Absoluta \"partial\")",
         "night": "Night – instant stay (partial, no entry delay)",
         "forced": "Forced – full arming even with open zones (they are bypassed). Shown as \"custom bypass\"."
+      }
+    },
+    "last_event_ignore": {
+      "options": {
+        "receipts": "Delivery receipts (SMS sent, event received OK, push OK)",
+        "datetime": "Date / time changes",
+        "user_entry": "User entries (code recognised)",
+        "phone": "Phone calls (start, executed)"
       }
     }
   }

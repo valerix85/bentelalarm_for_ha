@@ -339,6 +339,15 @@ PARTITION_WHO = {(1, 0x06), (2, 0x06), (3, 0x06)}
 # quick, disarming done (a different record = someone armed or disarmed).
 ARMING_RECORDS = frozenset({(0, 0x33), (0, 0x4A), (0, 0x4D), (0, 0x66)})
 
+# Event categories the "Last event" sensor can be told to ignore (option
+# last_event_ignore, issue #23). The events stay in `recent` and in the log bus events.
+IGNORABLE_EVENTS: dict[str, frozenset[tuple[int, int]]] = {
+    "receipts": frozenset({(0, 0x78), (0, 0x7A), (0, 0x7E)}),  # SMS / event / push delivered
+    "datetime": frozenset({(0, 0x23), (0, 0x4C)}),  # date/time change, summer time
+    "user_entry": frozenset({(0, 0x15)}),  # "Riconosciuto Cod"
+    "phone": frozenset({(0, 0x20), (0, 0x47)}),  # phone call start / executed
+}
+
 INFORMATIONAL_EVENTS = frozenset({(0, 0x78), (0, 0x7A), (0, 0x7E)})
 
 
@@ -390,6 +399,11 @@ class PanelEvent:
         if self.where == 0 and (self.cls, self.code) in PARTITION_WHO and self.who not in (0, 0xFF):
             return self.who
         return None
+
+    def ignored_by(self, categories) -> bool:
+        """Whether the event belongs to one of the ignorable categories."""
+        key = (self.cls, self.code)
+        return any(key in IGNORABLE_EVENTS.get(c, ()) for c in categories)
 
     @property
     def informational(self) -> bool:

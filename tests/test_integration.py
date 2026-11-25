@@ -515,3 +515,42 @@ def test_arm_mode_for_defaults() -> None:
         arm_mode_for({"arm_home_as": "custom_d"}, "arm_home_as", ArmMode.STAY) is ArmMode.CUSTOM_D
     )
     assert arm_mode_for({"arm_home_as": "bogus"}, "arm_home_as", ArmMode.STAY) is ArmMode.STAY
+
+
+async def test_last_event_ignore_option(hass: HomeAssistant, panel: FakePanel) -> None:
+    """Issue #23: the categories ignored by "Last event" come from the options."""
+    panel.log_event(0x1007, who=2)  # zone alarm
+    panel.log_event(0x0023)  # date/time change
+    panel.log_event(0x007E)  # push OK (delivery receipt)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="00:03:4f:06:00:03",
+        data={CONF_HOST: "127.0.0.1", CONF_PORT: panel.port, CONF_PIN: "1234"},
+        options={"poll_interval": 2, "last_event_ignore": ["receipts", "datetime"]},
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    sensor = next(
+        e for e in er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
+        if e.domain == "sensor"
+    )
+    assert hass.states.get(sensor.entity_id).state.startswith("Zone alarm")
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+    # default (only receipts): the date/time change is the newest shown record
+    entry2 = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="00:03:4f:06:00:04",
+        data={CONF_HOST: "127.0.0.1", CONF_PORT: panel.port, CONF_PIN: "1234"},
+        options={"poll_interval": 2},
+    )
+    entry2.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry2.entry_id)
+    await hass.async_block_till_done()
+    sensor2 = next(
+        e for e in er.async_entries_for_config_entry(er.async_get(hass), entry2.entry_id)
+        if e.domain == "sensor"
+    )
+    assert hass.states.get(sensor2.entity_id).state == "date/time change"
+    assert await hass.config_entries.async_unload(entry2.entry_id)

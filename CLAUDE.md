@@ -196,3 +196,7 @@ The repository is English-only (code, comments, docs); Italian is used only in
   flags must match for those modes) and the log shows no arming record (`events.ARMING_RECORDS`: 0x33, 0x4A,
   0x4D "Arming OK", 0x66 "Disarming exec.") that is not in the saved keys. Not verified on a real panel: record
   codes come from the log text table. An arming right before the restart falls back to the old behaviour.
+- Last event filter (0.3.42, issue #23): option `last_event_ignore` (multi-select, default `["receipts"]` = the 0.3.39
+  behaviour) chooses the categories the "Last event" sensor skips: `receipts` (0x78/0x7A/0x7E), `datetime`
+  (0x23, 0x4C), `user_entry` (0x15), `phone` (0x20, 0x47); see `events.IGNORABLE_EVENTS`. Filtered events stay in
+  `recent` and in the `log` bus events. Note the integration's own login (0x15) is already hidden everywhere.

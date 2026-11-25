@@ -26,11 +26,13 @@ from .const import (
     CONF_ARM_HOME_AS,
     CONF_ARM_MODES,
     CONF_ARM_NIGHT_AS,
+    CONF_LAST_EVENT_IGNORE,
     CONF_PIN,
     CONF_POLL_INTERVAL,
     CONF_REQUIRE_CODE,
     CONF_REQUIRE_CODE_ARM,
     DEFAULT_ARM_MODES,
+    DEFAULT_LAST_EVENT_IGNORE,
     DEFAULT_POLL_INTERVAL,
     DEFAULT_PORT,
     DOMAIN,
@@ -44,6 +46,7 @@ from .itv2.client import (
     ITv2Error,
     TcpConnectFailed,
 )
+from .itv2.events import IGNORABLE_EVENTS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -243,6 +246,16 @@ class BentelOptionsFlow(OptionsFlow):
                 ),
                 vol.Required(CONF_REQUIRE_CODE, default=False): selector.BooleanSelector(),
                 vol.Required(CONF_REQUIRE_CODE_ARM, default=True): selector.BooleanSelector(),
+                vol.Required(
+                    CONF_LAST_EVENT_IGNORE, default=DEFAULT_LAST_EVENT_IGNORE
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=list(IGNORABLE_EVENTS),
+                        multiple=True,
+                        mode=selector.SelectSelectorMode.LIST,
+                        translation_key="last_event_ignore",
+                    )
+                ),
             }
         )
         return self.async_show_form(

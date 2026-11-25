@@ -55,7 +55,8 @@
           "arm_modes": "Modalità di inserimento proposte per ogni area",
           "arm_away_as": "Il pulsante Fuori casa invia",
           "arm_home_as": "Il pulsante In casa invia",
-          "arm_night_as": "Il pulsante Notte invia"
+          "arm_night_as": "Il pulsante Notte invia",
+          "last_event_ignore": "Eventi nascosti da \"Ultimo evento\""
         },
         "data_description": {
           "poll_interval": "Lo stato aperto/chiuso delle zone non viene notificato dalla centrale e viene letto a questo intervallo (funziona anche da keep-alive). 1-2 s per zone che accendono luci.",
@@ -64,7 +65,8 @@
           "arm_modes": "Le aree Absoluta di solito sono solo inserite o disinserite (Fuori casa = inserimento totale). Attiva In casa (parziale) e Notte (parziale istantaneo) solo se le usi sulla centrale.",
           "arm_away_as": "Cosa invia alla centrale la modalità Fuori casa. Le varianti forzate escludono le zone aperte invece di essere rifiutate; funzionano anche con il codice richiesto per inserire.",
           "arm_home_as": "Cosa invia alla centrale la modalità In casa (predefinita: stay).",
-          "arm_night_as": "Cosa invia alla centrale la modalità Notte (predefinita: parziale istantaneo)."
+          "arm_night_as": "Cosa invia alla centrale la modalità Notte (predefinita: parziale istantaneo).",
+          "last_event_ignore": "Restano nell'attributo \"recent\" e vengono comunque emessi come eventi. Lascia vuoto per mostrare tutti gli eventi documentati."
         }
       }
     },
@@ -188,6 +190,14 @@
         "custom_b_forced": "Modalità personalizzata B, forzata",
         "custom_c_forced": "Modalità personalizzata C, forzata",
         "custom_d_forced": "Modalità personalizzata D, forzata"
+      }
+    },
+    "last_event_ignore": {
+      "options": {
+        "receipts": "Ricevute di consegna (SMS inviato, evento ricevuto OK, push OK)",
+        "datetime": "Cambi di data / ora",
+        "user_entry": "Accessi utente (codice riconosciuto)",
+        "phone": "Chiamate telefoniche (inizio, eseguita)"
       }
     }
   }

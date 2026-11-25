@@ -22,6 +22,10 @@ def code_required(options, *, arm: bool) -> bool:
     return options.get(CONF_REQUIRE_CODE_ARM, True) if arm else True
 
 
+# Event categories hidden from the "Last event" sensor (see itv2.events.IGNORABLE_EVENTS)
+CONF_LAST_EVENT_IGNORE = "last_event_ignore"
+DEFAULT_LAST_EVENT_IGNORE = ["receipts"]
+
 CONF_ARM_MODES = "arm_modes"
 
 

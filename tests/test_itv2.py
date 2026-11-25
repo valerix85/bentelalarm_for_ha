@@ -1173,3 +1173,14 @@ def test_load_arming_snapshot_ignores_garbage():
     for bad in (None, [], {"modes": {"x": "y"}}, {"modes": {}}):
         client.load_arming_snapshot(bad)
         assert client._restore is None
+
+
+def test_ignorable_event_categories():
+    """Option "Last event" ignore (issue #23): categories map to class/code pairs."""
+    receipt = ev.parse_event(bytes(5) + (0x007E).to_bytes(2, "big") + bytes(6))
+    entry = ev.parse_event(bytes(5) + (0x0015).to_bytes(2, "big") + bytes(6))
+    alarm = ev.parse_event(bytes(5) + (0x1007).to_bytes(2, "big") + bytes(6))
+    assert receipt.ignored_by(["receipts"]) and not receipt.ignored_by(["datetime"])
+    assert entry.ignored_by(["user_entry"]) and not entry.ignored_by(["receipts"])
+    assert not alarm.ignored_by(list(ev.IGNORABLE_EVENTS))
+    assert not receipt.ignored_by([]) and not receipt.ignored_by(["unknown"])
