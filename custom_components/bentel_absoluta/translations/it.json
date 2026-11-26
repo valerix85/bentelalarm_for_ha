@@ -197,7 +197,8 @@
         "receipts": "Ricevute di consegna (SMS inviato, evento ricevuto OK, push OK)",
         "datetime": "Cambi di data / ora",
         "user_entry": "Accessi utente (codice riconosciuto)",
-        "phone": "Chiamate telefoniche (inizio, eseguita)"
+        "phone": "Chiamate telefoniche (inizio, eseguita)",
+        "queued": "Eventi accodati (evento messo in coda di chiamata)"
       }
     }
   }
