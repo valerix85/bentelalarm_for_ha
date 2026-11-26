@@ -201,5 +201,17 @@
         "queued": "Queued events (event put in the call queue)"
       }
     }
+  },
+  "services": {
+    "sms_preview": {
+      "name": "Read SMS preview (diagnostic)",
+      "description": "Asks the panel for its stored SMS list (ITv2 command 0103) and returns / logs the raw answer. Read-only: nothing is deleted. Not every panel supports it.",
+      "fields": {
+        "count": {
+          "name": "Number of SMS",
+          "description": "How many messages to preview (1-10)."
+        }
+      }
+    }
   }
 }

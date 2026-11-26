@@ -48,6 +48,8 @@ class FakePanel:
         # Next N event log reads (0101) are refused with this 0502 code
         # (seen on an Absoluta Plus 48: 0x19 "command timed out" now and then)
         self.event_read_errors = 0
+        self.sms_requests: list[bytes] = []
+        self.sms_error: int | None = None  # answer 0502 with this code instead
         self.event_read_error_code = 0x19
         self.pin = pin
         self.zones = list(zones)
@@ -311,6 +313,12 @@ class FakePanel:
                 + len(records).to_bytes(2, "big")
                 + b"".join(records)
             )
+        elif cmd == Cmd.SMS_PREVIEW_READ:
+            self.sms_requests.append(bytes(p))
+            if self.sms_error is not None:
+                self._respond(p[0], self.sms_error)
+            else:
+                self._send(cmd_bytes(Cmd.SMS_PREVIEW_READ_RESPONSE) + bytes([0x00]))
         elif cmd == Cmd.TIME_DATE_WRITE:
             self.panel_time = p[1:5]
             self._respond(p[0])

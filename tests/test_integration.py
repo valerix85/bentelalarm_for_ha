@@ -554,3 +554,36 @@ async def test_last_event_ignore_option(hass: HomeAssistant, panel: FakePanel) -
     )
     assert hass.states.get(sensor2.entity_id).state == "date/time change"
     assert await hass.config_entries.async_unload(entry2.entry_id)
+
+
+async def test_sms_preview_service(hass: HomeAssistant, panel: FakePanel) -> None:
+    """Read-only SMS preview diagnostic (0103): raw answer returned, errors reported."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="00:03:4f:06:00:03",
+        data={CONF_HOST: "127.0.0.1", CONF_PORT: panel.port, CONF_PIN: "1234"},
+        options={"poll_interval": 2},
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass.services.has_service(DOMAIN, "sms_preview")
+
+    result = await hass.services.async_call(
+        DOMAIN, "sms_preview", {"count": 3}, blocking=True, return_response=True
+    )
+    answer = result[entry.entry_id]
+    assert answer["supported"] is True and answer["raw"] == "00"
+    assert panel.sms_requests[-1][1:] == bytes([0x00, 0x03])  # mode current, 3 SMS
+
+    panel.sms_error = 0x01  # the panel refuses
+    result = await hass.services.async_call(
+        DOMAIN, "sms_preview", {}, blocking=True, return_response=True
+    )
+    answer = result[entry.entry_id]
+    assert answer["supported"] is False and answer["code"] == 0x01
+    assert not panel.errors
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert not hass.services.has_service(DOMAIN, "sms_preview")

@@ -200,3 +200,9 @@ The repository is English-only (code, comments, docs); Italian is used only in
   behaviour) chooses the categories the "Last event" sensor skips: `receipts` (0x78/0x7A/0x7E), `datetime`
   (0x23, 0x4C), `user_entry` (0x15), `phone` (0x20, 0x47), `queued` (0x46 "Queued event" / "Evento accodato", 0.3.43, issue #23); see `events.IGNORABLE_EVENTS`. Filtered events stay in
   `recent` and in the `log` bus events. Note the integration's own login (0x15) is already hidden everywhere.
+- SMS preview diagnostic (0.3.44, issue #17): service `bentel_absoluta.sms_preview` sends the ITv2 0103 "SMS Preview
+  Read" (`01 03 <appseq> 00 <n>`: mode 0 = current group, n SMS; spec R2.03 6.3.9) and returns / logs the raw 4103
+  answer or the 0502 error code. Read-only. Whether Absoluta / ABS-IP implements the SMS commands (0103/0104/0105/
+  0111) is UNKNOWN: they are not in the Usage Guide, and two debug logs from an Absoluta 16 showed no 0111 pushed by
+  the panel. The 4103 payload is not parsed on purpose until a real answer has been seen. Delete (0105) is not built.
+

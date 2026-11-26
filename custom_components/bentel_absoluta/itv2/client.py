@@ -1270,6 +1270,19 @@ class AbsolutaClient:
             timeout=4,
         )
 
+    async def sms_preview(self, count: int = 5) -> bytes:
+        """Ask the panel for the preview of its stored SMS (ITv2 0103, mode 0 =
+        current group) and return the raw 4103 payload. Read-only diagnostic:
+        whether Absoluta / ABS-IP supports it is unknown (not in the Usage Guide);
+        a refusal raises CommandFailed with the panel's code."""
+
+        def match(cmd: int, payload: bytes):
+            return bytes(payload) if cmd == Cmd.SMS_PREVIEW_READ_RESPONSE else None
+
+        return await self._request(
+            Cmd.SMS_PREVIEW_READ, bytes([0x00, count & 0xFF]), match, timeout=6
+        )
+
     async def check_events(self) -> None:
         """Fetch the latest log records and emit the new ones as events."""
         self._events_due = False

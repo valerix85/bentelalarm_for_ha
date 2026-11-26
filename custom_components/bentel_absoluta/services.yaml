@@ -1,0 +1,10 @@
+sms_preview:
+  fields:
+    count:
+      required: false
+      default: 5
+      example: 5
+      selector:
+        number:
+          min: 1
+          max: 10

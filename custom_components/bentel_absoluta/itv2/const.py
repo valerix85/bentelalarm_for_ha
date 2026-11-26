@@ -24,6 +24,9 @@ class Cmd(IntEnum):
     # Log
     EVENT_BUFFER_READ = 0x0101
     EVENT_BUFFER_READ_RESPONSE = 0x4101
+    # SMS (ITv2 spec R2.03 6.3.9; not documented in the Absoluta usage guide)
+    SMS_PREVIEW_READ = 0x0103
+    SMS_PREVIEW_READ_RESPONSE = 0x4103
     # Access level
     ENTER_ACCESS_LEVEL = 0x0400
     EXIT_ACCESS_LEVEL = 0x0401
@@ -70,6 +73,7 @@ CMDS_WITH_APP_SEQ = {
     Cmd.COMMAND_REQUEST,
     Cmd.SECTION_READ,
     Cmd.EVENT_BUFFER_READ,
+    Cmd.SMS_PREVIEW_READ,
     Cmd.TIME_DATE_WRITE,
     Cmd.SINGLE_ZONE_BYPASS_WRITE,
     Cmd.PARTITION_ARM,

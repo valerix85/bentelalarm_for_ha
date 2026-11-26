@@ -222,3 +222,7 @@ Tyco / Johnson Controls. "Bentel" and "Absoluta" are trademarks of their respect
 Use it at your own risk: it is not a certified security product.
 
 Released under the [MIT License](LICENSE).
+
+## Diagnostic service: SMS preview
+
+`bentel_absoluta.sms_preview` (Developer tools → Actions) asks the panel for its stored SMS list using the generic ITv2 command and shows the raw answer (also written to the log). It is read-only and only meant to find out whether your panel supports SMS over ITv2; many do not. Please share the result in the issue tracker.

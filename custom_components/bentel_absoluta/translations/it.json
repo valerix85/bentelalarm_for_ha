@@ -201,5 +201,17 @@
         "queued": "Eventi accodati (evento messo in coda di chiamata)"
       }
     }
+  },
+  "services": {
+    "sms_preview": {
+      "name": "Leggi anteprima SMS (diagnostica)",
+      "description": "Chiede alla centrale l'elenco degli SMS memorizzati (comando ITv2 0103) e restituisce / registra nel log la risposta grezza. Sola lettura: non cancella nulla. Non tutte le centrali la supportano.",
+      "fields": {
+        "count": {
+          "name": "Numero di SMS",
+          "description": "Quanti messaggi mostrare (1-10)."
+        }
+      }
+    }
   }
 }

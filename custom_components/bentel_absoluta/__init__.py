@@ -12,8 +12,19 @@ from homeassistant.const import (
     EVENT_HOMEASSISTANT_STOP,
     Platform,
 )
-from homeassistant.core import Event, HomeAssistant, callback
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.core import (
+    Event,
+    HomeAssistant,
+    ServiceCall,
+    ServiceResponse,
+    SupportsResponse,
+    callback,
+)
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    ConfigEntryNotReady,
+    HomeAssistantError,
+)
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
 
@@ -25,7 +36,7 @@ from .const import (
     DOMAIN,
     EVENT_BENTEL,
 )
-from .itv2.client import AbsolutaClient, AuthenticationFailed, ITv2Error
+from .itv2.client import AbsolutaClient, AuthenticationFailed, CommandFailed, ITv2Error
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -38,6 +49,30 @@ PLATFORMS: list[Platform] = [
 ]
 
 type BentelConfigEntry = ConfigEntry[AbsolutaClient]
+
+SERVICE_SMS_PREVIEW = "sms_preview"
+
+
+async def _sms_preview(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
+    """Read-only diagnostic: ask each panel for its SMS preview (ITv2 0103) and
+    return / log the raw answer. Nothing is deleted."""
+    result: dict = {}
+    entries = [
+        e for e in hass.config_entries.async_entries(DOMAIN) if e.state.name == "LOADED"
+    ]
+    if not entries:
+        raise HomeAssistantError("Bentel Absoluta is not loaded")
+    for entry in entries:
+        try:
+            raw = await entry.runtime_data.sms_preview(call.data.get("count", 5))
+            answer = {"supported": True, "raw": raw.hex(" ")}
+        except CommandFailed as err:
+            answer = {"supported": False, "error": str(err), "code": err.code}
+        except (ITv2Error, TimeoutError) as err:
+            answer = {"supported": None, "error": f"no answer: {err}"}
+        _LOGGER.info("SMS preview (0103) answer from %s: %s", entry.title, answer)
+        result[entry.entry_id] = answer
+    return result
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: BentelConfigEntry) -> bool:
@@ -86,6 +121,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: BentelConfigEntry) -> bo
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
     entry.runtime_data = client
+    if not hass.services.has_service(DOMAIN, SERVICE_SMS_PREVIEW):
+
+        async def _handle_sms_preview(call: ServiceCall) -> ServiceResponse:
+            return await _sms_preview(hass, call)
+
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_SMS_PREVIEW,
+            _handle_sms_preview,
+            supports_response=SupportsResponse.ONLY,
+        )
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
@@ -99,6 +145,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: BentelConfigEntry) -> b
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
         await entry.runtime_data.stop()
+        others = [
+            e
+            for e in hass.config_entries.async_entries(DOMAIN)
+            if e.entry_id != entry.entry_id and e.state.name == "LOADED"
+        ]
+        if not others:
+            hass.services.async_remove(DOMAIN, SERVICE_SMS_PREVIEW)
     return unloaded
 
 
