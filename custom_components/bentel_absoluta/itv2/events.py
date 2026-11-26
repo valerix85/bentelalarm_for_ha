@@ -346,6 +346,7 @@ IGNORABLE_EVENTS: dict[str, frozenset[tuple[int, int]]] = {
     "datetime": frozenset({(0, 0x23), (0, 0x4C)}),  # date/time change, summer time
     "user_entry": frozenset({(0, 0x15)}),  # "Riconosciuto Cod"
     "phone": frozenset({(0, 0x20), (0, 0x47)}),  # phone call start / executed
+    "queued": frozenset({(0, 0x46)}),  # "Evento accodato": event put in the call queue
 }
 
 INFORMATIONAL_EVENTS = frozenset({(0, 0x78), (0, 0x7A), (0, 0x7E)})

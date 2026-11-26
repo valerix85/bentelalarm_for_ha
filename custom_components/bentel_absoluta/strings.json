@@ -177,7 +177,8 @@
         "receipts": "Delivery receipts (SMS sent, event received OK, push OK)",
         "datetime": "Date / time changes",
         "user_entry": "User entries (code recognised)",
-        "phone": "Phone calls (start, executed)"
+        "phone": "Phone calls (start, executed)",
+        "queued": "Queued events (event put in the call queue)"
       }
     }
   }

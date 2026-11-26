@@ -1182,5 +1182,8 @@ def test_ignorable_event_categories():
     alarm = ev.parse_event(bytes(5) + (0x1007).to_bytes(2, "big") + bytes(6))
     assert receipt.ignored_by(["receipts"]) and not receipt.ignored_by(["datetime"])
     assert entry.ignored_by(["user_entry"]) and not entry.ignored_by(["receipts"])
+    queued = ev.parse_event(bytes(5) + (0x0046).to_bytes(2, "big") + bytes(6))
+    assert queued.text() == "Evento accodato" and queued.ignored_by(["queued"])
+    assert not queued.ignored_by(["receipts", "phone"])
     assert not alarm.ignored_by(list(ev.IGNORABLE_EVENTS))
     assert not receipt.ignored_by([]) and not receipt.ignored_by(["unknown"])
